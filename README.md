@@ -1,141 +1,224 @@
-# 🚀 Welcome to Z.ai Code Scaffold
+# D&D Master Tools
 
-A modern, production-ready web application scaffold powered by cutting-edge technologies, designed to accelerate your development with [Z.ai](https://chat.z.ai)'s AI-powered coding assistance.
+A comprehensive full-stack web application for D&D campaign management, featuring AI-powered character generation, NPC creation, world building, and more.
 
-## ✨ Technology Stack
+## 🚀 Features
 
-This scaffold provides a robust foundation built with:
+### Core Tools
+- **Character Generator** - Create detailed D&D characters with balanced stats and PDF export
+- **NPC Generator** - Generate memorable NPCs with personalities and motivations
+- **World Lore Builder** - Build rich worlds with detailed lore and geography
+- **Item Generator** - Create unique weapons, armor, and magical items
+- **Quest Builder** - Design engaging quests with objectives and rewards
+- **Encounter Creator** - Build balanced encounters with appropriate challenges
+- **Auto-Save System** - All generated content is automatically saved with 30-day expiration
 
-### 🎯 Core Framework
-- **⚡ Next.js 15** - The React framework for production with App Router
-- **📘 TypeScript 5** - Type-safe JavaScript for better developer experience
-- **🎨 Tailwind CSS 4** - Utility-first CSS framework for rapid UI development
+### Technical Features
+- **Modern Stack** - Next.js 15 with App Router and TypeScript
+- **Authentication** - JWT-based authentication with secure cookies
+- **Database** - PostgreSQL with Prisma ORM
+- **Payments** - Paystack integration for token purchases
+- **AI Generation** - OpenRouter API for content generation
+- **Auto-Save System** - Automatic content saving with 30-day expiration
+- **PDF Export** - Puppeteer-based PDF generation
+- **Styling** - Tailwind CSS for modern, responsive design
+- **Protected Routes** - Middleware-based route protection
 
-### 🧩 UI Components & Styling
-- **🧩 shadcn/ui** - High-quality, accessible components built on Radix UI
-- **🎯 Lucide React** - Beautiful & consistent icon library
-- **🌈 Framer Motion** - Production-ready motion library for React
-- **🎨 Next Themes** - Perfect dark mode in 2 lines of code
+## 🛠️ Tech Stack
 
-### 📋 Forms & Validation
-- **🎣 React Hook Form** - Performant forms with easy validation
-- **✅ Zod** - TypeScript-first schema validation
-
-### 🔄 State Management & Data Fetching
-- **🐻 Zustand** - Simple, scalable state management
-- **🔄 TanStack Query** - Powerful data synchronization for React
-- **🌐 Axios** - Promise-based HTTP client
-
-### 🗄️ Database & Backend
-- **🗄️ Prisma** - Next-generation Node.js and TypeScript ORM
-- **🔐 NextAuth.js** - Complete open-source authentication solution
-
-### 🎨 Advanced UI Features
-- **📊 TanStack Table** - Headless UI for building tables and datagrids
-- **🖱️ DND Kit** - Modern drag and drop toolkit for React
-- **📊 Recharts** - Redefined chart library built with React and D3
-- **🖼️ Sharp** - High performance image processing
-
-### 🌍 Internationalization & Utilities
-- **🌍 Next Intl** - Internationalization library for Next.js
-- **📅 Date-fns** - Modern JavaScript date utility library
-- **🪝 ReactUse** - Collection of essential React hooks for modern development
-
-## 🎯 Why This Scaffold?
-
-- **🏎️ Fast Development** - Pre-configured tooling and best practices
-- **🎨 Beautiful UI** - Complete shadcn/ui component library with advanced interactions
-- **🔒 Type Safety** - Full TypeScript configuration with Zod validation
-- **📱 Responsive** - Mobile-first design principles with smooth animations
-- **🗄️ Database Ready** - Prisma ORM configured for rapid backend development
-- **🔐 Auth Included** - NextAuth.js for secure authentication flows
-- **📊 Data Visualization** - Charts, tables, and drag-and-drop functionality
-- **🌍 i18n Ready** - Multi-language support with Next Intl
-- **🚀 Production Ready** - Optimized build and deployment settings
-- **🤖 AI-Friendly** - Structured codebase perfect for AI assistance
-
-## 🚀 Quick Start
-
-```bash
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-```
-
-Open [http://localhost:3000](http://localhost:3000) to see your application running.
-
-## 🤖 Powered by Z.ai
-
-This scaffold is optimized for use with [Z.ai](https://chat.z.ai) - your AI assistant for:
-
-- **💻 Code Generation** - Generate components, pages, and features instantly
-- **🎨 UI Development** - Create beautiful interfaces with AI assistance  
-- **🔧 Bug Fixing** - Identify and resolve issues with intelligent suggestions
-- **📝 Documentation** - Auto-generate comprehensive documentation
-- **🚀 Optimization** - Performance improvements and best practices
-
-Ready to build something amazing? Start chatting with Z.ai at [chat.z.ai](https://chat.z.ai) and experience the future of AI-powered development!
+- **Frontend**: Next.js 15, React 19, TypeScript
+- **Styling**: Tailwind CSS, Lucide React icons
+- **Backend**: Next.js API Routes
+- **Database**: PostgreSQL with Prisma ORM
+- **Authentication**: JWT with bcryptjs
+- **Payments**: Paystack
+- **AI**: OpenRouter API, StableHorde for images
+- **Deployment**: Vercel-ready
 
 ## 📁 Project Structure
 
 ```
-src/
-├── app/                 # Next.js App Router pages
-├── components/          # Reusable React components
-│   └── ui/             # shadcn/ui components
-├── hooks/              # Custom React hooks
-└── lib/                # Utility functions and configurations
+dnd-app/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   │   ├── api/               # API routes
+│   │   │   └── auth/         # Authentication endpoints
+│   │   ├── dashboard/         # Protected dashboard pages
+│   │   │   ├── character-generator/
+│   │   │   ├── npc-generator/
+│   │   │   ├── world-builder/
+│   │   │   ├── item-generator/
+│   │   │   ├── quest-builder/
+│   │   │   └── encounter-creator/
+│   │   ├── login/            # Authentication pages
+│   │   ├── register/
+│   │   ├── layout.tsx        # Root layout
+│   │   └── page.tsx          # Landing page
+│   ├── lib/                  # Utility functions
+│   │   ├── auth.ts          # JWT authentication
+│   │   ├── db.ts            # Prisma database
+│   │   ├── tokens.ts        # Token management
+│   │   ├── queue.ts         # AI request queue
+│   │   └── utils.ts         # Common utilities
+│   └── middleware.ts         # Route protection
+├── prisma/                   # Database schema
+│   └── schema.prisma
+└── package.json
 ```
 
-## 🎨 Available Features & Components
+## 🚀 Getting Started
 
-This scaffold includes a comprehensive set of modern web development tools:
+### Prerequisites
 
-### 🧩 UI Components (shadcn/ui)
-- **Layout**: Card, Separator, Aspect Ratio, Resizable Panels
-- **Forms**: Input, Textarea, Select, Checkbox, Radio Group, Switch
-- **Feedback**: Alert, Toast (Sonner), Progress, Skeleton
-- **Navigation**: Breadcrumb, Menubar, Navigation Menu, Pagination
-- **Overlay**: Dialog, Sheet, Popover, Tooltip, Hover Card
-- **Data Display**: Badge, Avatar, Calendar
+- Node.js 18+ 
+- PostgreSQL database
+- Paystack account (for payments)
+- OpenRouter API key (for AI generation)
+- StableHorde API key (for image generation)
 
-### 📊 Advanced Data Features
-- **Tables**: Powerful data tables with sorting, filtering, pagination (TanStack Table)
-- **Charts**: Beautiful visualizations with Recharts
-- **Forms**: Type-safe forms with React Hook Form + Zod validation
+### Installation
 
-### 🎨 Interactive Features
-- **Animations**: Smooth micro-interactions with Framer Motion
-- **Drag & Drop**: Modern drag-and-drop functionality with DND Kit
-- **Theme Switching**: Built-in dark/light mode support
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd dnd-app
+   ```
 
-### 🔐 Backend Integration
-- **Authentication**: Ready-to-use auth flows with NextAuth.js
-- **Database**: Type-safe database operations with Prisma
-- **API Client**: HTTP requests with Axios + TanStack Query
-- **State Management**: Simple and scalable with Zustand
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-### 🌍 Production Features
-- **Internationalization**: Multi-language support with Next Intl
-- **Image Optimization**: Automatic image processing with Sharp
-- **Type Safety**: End-to-end TypeScript with Zod validation
-- **Essential Hooks**: 100+ useful React hooks with ReactUse for common patterns
+3. **Set up environment variables**
+   Copy `.env.example` to `.env` and fill in your values:
+   ```bash
+   cp .env.example .env
+   ```
 
-## 🤝 Get Started with Z.ai
+4. **Set up the database**
+   ```bash
+   # Generate Prisma client
+   npx prisma generate
 
-1. **Clone this scaffold** to jumpstart your project
-2. **Visit [chat.z.ai](https://chat.z.ai)** to access your AI coding assistant
-3. **Start building** with intelligent code generation and assistance
-4. **Deploy with confidence** using the production-ready setup
+   # Run database migrations
+   npx prisma migrate dev
+
+   # (Optional) Open Prisma Studio
+   npx prisma studio
+   ```
+
+5. **Start the development server**
+   ```bash
+   npm run dev
+   ```
+
+6. **Open your browser**
+   Navigate to [http://localhost:3000](http://localhost:3000)
+
+## 🗄️ Database Schema
+
+The application uses PostgreSQL with the following main models:
+
+- **User** - User accounts and authentication
+- **Character** - Generated D&D characters
+- **NPC** - Non-player characters
+- **World** - Campaign worlds and lore
+- **Item** - Weapons, armor, and magical items
+- **Quest** - Campaign quests and objectives
+- **Encounter** - Combat encounters and challenges
+- **Campaign** - Campaign organization
+- **TokenTransaction** - Token usage tracking
+
+## 🔐 Authentication
+
+The app uses JWT-based authentication with secure HTTP-only cookies:
+
+- **Registration** - `/api/auth/register`
+- **Login** - `/api/auth/login`
+- **Logout** - `/api/auth/logout`
+- **Protected Routes** - Middleware automatically redirects unauthenticated users
+
+## 💳 Payments
+
+Paystack integration for token purchases:
+
+- **Token System** - Users purchase tokens for AI generation
+- **Paystack Integration** - Secure payment processing
+- **Webhook Handling** - Automatic token crediting
+
+## 🎨 UI Components
+
+The application features a modern, responsive design with:
+
+- **Landing Page** - Hero section with feature highlights
+- **Dashboard** - Protected area with tool navigation
+- **Tool Pages** - Individual generators with forms and previews
+- **Authentication** - Clean login/register forms
+- **Token Management** - Purchase and balance tracking
+
+## 🚀 Deployment
+
+### Vercel (Recommended)
+
+1. **Connect your repository** to Vercel
+2. **Set environment variables** in Vercel dashboard
+3. **Deploy** - Vercel will automatically build and deploy
+
+### Manual Deployment
+
+1. **Build the application**
+   ```bash
+   npm run build
+   ```
+
+2. **Start the production server**
+   ```bash
+   npm start
+   ```
+
+## 🔧 Development
+
+### Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run lint` - Run ESLint
+- `npx prisma studio` - Open Prisma database GUI
+
+### Code Style
+
+- **TypeScript** - Strict type checking enabled
+- **ESLint** - Code linting and formatting
+- **Prettier** - Code formatting (if configured)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+For support, email support@dndmastertools.com or create an issue in the repository.
+
+## 🔮 Roadmap
+
+- [ ] Advanced AI content generation
+- [ ] Mobile app
+- [ ] Advanced analytics
+- [ ] Team collaboration features
+- [ ] API for third-party integrations
+- [ ] Custom theme support
+- [ ] Offline mode
+- [ ] Multi-language support
 
 ---
 
-Built with ❤️ for the developer community. Supercharged by [Z.ai](https://chat.z.ai) 🚀
+Built with ❤️ for the D&D community

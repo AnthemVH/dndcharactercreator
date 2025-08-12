@@ -1,0 +1,324 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id                 String             @id @default(cuid())
+  email              String             @unique
+  name               String?
+  password           String?
+  role               String             @default("user")
+  tokens             Int                @default(10)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  emailVerified      DateTime?
+  image              String?
+  accounts           Account[]
+  campaigns          Campaign[]
+  characters         Character[]
+  encounters         Encounter[]
+  generationStatuses GenerationStatus[]
+  items              Item[]
+  npcs               NPC[]
+  quests             Quest[]
+  sessions           Session[]
+  tokenTransactions  TokenTransaction[]
+  worlds             World[]
+}
+
+model Character {
+  id                String    @id @default(cuid())
+  name              String
+  race              String
+  class             String
+  level             Int       @default(1)
+  background        String?
+  alignment         String?
+  backstory         String?
+  personalityTraits String?
+  stats             String?
+  quote             String?
+  uniqueTrait       String?
+  hitPoints         Int?
+  armorClass        Int?
+  initiative        Int?
+  speed             Int?
+  proficiencies     String?
+  features          String?
+  portrait          String?
+  userId            String
+  campaignId        String?
+  autoSave          Boolean   @default(false)
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  characterJson     Json?
+  portraitUrl       String?
+  campaign          Campaign? @relation(fields: [campaignId], references: [id])
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model NPC {
+  id                String    @id @default(cuid())
+  name              String
+  race              String
+  role              String
+  personality       String?
+  location          String?
+  backstory         String?
+  personalityTraits String?
+  appearance        String?
+  motivations       String?
+  relationships     String?
+  secrets           String?
+  quote             String?
+  uniqueTrait       String?
+  stats             String?
+  skills            String?
+  equipment         String?
+  goals             String?
+  mood              String?
+  portrait          String?
+  userId            String
+  campaignId        String?
+  autoSave          Boolean   @default(false)
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  npcJson           Json?
+  portraitUrl       String?
+  campaign          Campaign? @relation(fields: [campaignId], references: [id])
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model World {
+  id            String    @id @default(cuid())
+  name          String
+  theme         String
+  landName      String
+  geography     String
+  politics      String
+  culture       String
+  notableEvents String?
+  majorFactions String?
+  landmarks     String?
+  climate       String
+  resources     String?
+  population    String
+  government    String
+  religion      String
+  economy       String
+  conflicts     String?
+  legends       String?
+  quote         String
+  uniqueFeature String
+  history       String
+  userId        String
+  campaignId    String?
+  autoSave      Boolean   @default(false)
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  portrait      String?
+  worldJson     Json?
+  campaign      Campaign? @relation(fields: [campaignId], references: [id])
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Item {
+  id                String    @id @default(cuid())
+  name              String
+  itemType          String
+  theme             String
+  rarity            String
+  description       String
+  properties        String?
+  magicalEffects    String?
+  history           String
+  value             String
+  weight            String
+  requirements      String?
+  attunement        Boolean
+  quote             String
+  uniqueTrait       String
+  craftingMaterials String?
+  enchantments      String?
+  restrictions      String?
+  portrait          String?
+  userId            String
+  campaignId        String?
+  autoSave          Boolean   @default(false)
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  itemJson          Json?
+  campaign          Campaign? @relation(fields: [campaignId], references: [id])
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Quest {
+  id                String    @id @default(cuid())
+  title             String
+  description       String?
+  difficulty        String?
+  objectives        String?
+  rewards           String?
+  location          String?
+  npcs              String?
+  timeline          String?
+  consequences      String?
+  questType         String?
+  levelRange        String?
+  estimatedDuration String?
+  userId            String
+  campaignId        String?
+  autoSave          Boolean   @default(false)
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  portrait          String?
+  questJson         Json?
+  campaign          Campaign? @relation(fields: [campaignId], references: [id])
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Encounter {
+  id                String    @id @default(cuid())
+  name              String
+  difficulty        String?
+  enemies           String?
+  environment       String?
+  objectives        String?
+  rewards           String?
+  terrain           String?
+  hazards           String?
+  reinforcements    String?
+  levelRange        String?
+  estimatedDuration String?
+  tactics           String?
+  userId            String
+  campaignId        String?
+  autoSave          Boolean   @default(false)
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  portrait          String?
+  encounterJson     Json?
+  campaign          Campaign? @relation(fields: [campaignId], references: [id])
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model TokenTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String
+  amount      Int
+  description String
+  timestamp   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Campaign {
+  id                 String      @id @default(cuid())
+  name               String
+  description        String?
+  theme              String?
+  difficulty         String?
+  playerCount        Int?
+  characterSlots     Int?        @default(4)
+  levelRange         String?
+  estimatedDuration  String?
+  setting            String?
+  mainPlot           String?
+  subPlots           String?
+  majorNPCs          String?
+  locations          String?
+  items              String?
+  quests             String?
+  encounters         String?
+  characters         String?
+  notes              String?
+  status             String      @default("active")
+  userId             String
+  autoSave           Boolean     @default(false)
+  expiresAt          DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  portrait           String?
+  campaignJson       Json?
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignCharacters Character[]
+  campaignEncounters Encounter[]
+  campaignItems      Item[]
+  campaignNpcs       NPC[]
+  campaignQuests     Quest[]
+  campaignWorlds     World[]
+}
+
+model GenerationStatus {
+  id            String   @id @default(cuid())
+  userId        String
+  status        String
+  progress      Int      @default(0)
+  stage         String
+  estimatedTime Int      @default(0)
+  result        String?
+  error         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Feedback {
+  id            String   @id @default(cuid())
+  name          String
+  email         String?
+  feedbackType  String
+  rating        Int?
+  message       String
+  status        String   @default("new") // new, reviewed, resolved, closed
+  adminNotes    String?
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
