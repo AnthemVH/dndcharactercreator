@@ -4,99 +4,8 @@ import { Prisma } from '@prisma/client'
 
 export interface AutoSaveContent {
   type: 'character' | 'npc' | 'item' | 'quest' | 'encounter' | 'world' | 'campaign'
-  data: Record<string, unknown>
+  data: Record<string, any>
   userId: string
-}
-
-/**
- * Serializes array fields to JSON strings for database storage
- * and filters out fields that don't exist in the database schema
- */
-function serializeData(data: Record<string, unknown>, type: string): Record<string, unknown> {
-  const serialized = { ...data }
-
-  // Define valid fields for each model type based on Prisma schema
-  const validFields = {
-    character: [
-      'name', 'race', 'class', 'level', 'background', 'alignment', 'backstory',
-      'personalityTraits', 'stats', 'quote', 'uniqueTrait', 'hitPoints',
-      'armorClass', 'initiative', 'speed', 'proficiencies', 'features',
-      'portrait', 'portraitUrl', 'userId', 'campaignId'
-    ],
-    npc: [
-      'name', 'race', 'role', 'personality', 'location', 'backstory',
-      'personalityTraits', 'appearance', 'motivations', 'relationships',
-      'secrets', 'quote', 'uniqueTrait', 'stats', 'skills', 'equipment',
-      'goals', 'mood', 'portrait', 'portraitUrl', 'userId', 'campaignId'
-    ],
-    world: [
-      'name', 'theme', 'landName', 'geography', 'politics', 'culture',
-      'notableEvents', 'majorFactions', 'landmarks', 'climate', 'resources',
-      'population', 'government', 'religion', 'economy', 'conflicts',
-      'legends', 'quote', 'uniqueFeature', 'history', 'portrait', 'userId', 'campaignId'
-    ],
-    item: [
-      'name', 'itemType', 'theme', 'rarity', 'description', 'properties',
-      'magicalEffects', 'history', 'value', 'weight', 'requirements',
-      'attunement', 'quote', 'uniqueTrait', 'craftingMaterials',
-      'enchantments', 'restrictions', 'portrait', 'userId', 'campaignId'
-    ],
-    quest: [
-      'title', 'description', 'difficulty', 'objectives', 'rewards',
-      'location', 'npcs', 'timeline', 'consequences', 'questType',
-      'levelRange', 'estimatedDuration', 'portrait', 'userId', 'campaignId'
-    ],
-    encounter: [
-      'name', 'description', 'difficulty', 'location', 'enemies',
-      'objectives', 'rewards', 'environment', 'specialConditions',
-      'estimatedDuration', 'levelRange', 'portrait', 'userId', 'campaignId'
-    ],
-    campaign: [
-      'name', 'description', 'theme', 'setting', 'mainPlot', 'levelRange',
-      'estimatedDuration', 'locations', 'quests', 'encounters', 'items',
-      'characters', 'npcs', 'subPlots', 'majorNPCs', 'portrait', 'userId'
-    ]
-  }
-
-  // Filter out fields that don't exist in the database schema
-  const fieldsToKeep = validFields[type as keyof typeof validFields] || []
-  const filtered = Object.keys(serialized).reduce((acc, key) => {
-    if (fieldsToKeep.includes(key)) {
-      acc[key] = serialized[key]
-    }
-    return acc
-  }, {} as Record<string, unknown>)
-
-  // Array fields that need to be serialized to JSON strings
-  const arrayFields = [
-    'personalityTraits', 'proficiencies', 'features', 'motivations', 
-    'relationships', 'secrets', 'skills', 'equipment', 'goals',
-    'notableEvents', 'majorFactions', 'landmarks', 'resources', 
-    'conflicts', 'legends', 'properties', 'magicalEffects', 
-    'requirements', 'craftingMaterials', 'enchantments', 'restrictions',
-    'objectives', 'npcs', 'subPlots', 'majorNPCs', 'locations', 
-    'items', 'quests', 'encounters', 'characters'
-  ]
-
-  // Object fields that need to be serialized to JSON strings
-  const objectFields = [
-    'stats'
-    // Add more if needed (e.g., abilities, etc.)
-  ]
-
-  arrayFields.forEach(field => {
-    if (filtered[field] && Array.isArray(filtered[field])) {
-      filtered[field] = JSON.stringify(filtered[field])
-    }
-  })
-
-  objectFields.forEach(field => {
-    if (filtered[field] && typeof filtered[field] === 'object' && !Array.isArray(filtered[field])) {
-      filtered[field] = JSON.stringify(filtered[field])
-    }
-  })
-
-  return filtered
 }
 
 /**
@@ -107,83 +16,82 @@ export async function autoSaveContent({ type, data, userId }: AutoSaveContent) {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 30) // 30 days from now
 
-    const serializedData = serializeData(data, type)
+    const commonData = {
+      userId: userId,
+      autoSave: true,
+      expiresAt,
+      data: data as Prisma.InputJsonValue,
+    }
 
     switch (type) {
       case 'character':
         return await prisma.character.create({
           data: {
-            ...serializedData,
-            characterJson: data as Prisma.InputJsonValue, // Store the full character object
-            userId: userId,
-            autoSave: true,
-            expiresAt,
+            ...commonData,
+            name: data.name,
+            race: data.race,
+            class: data.class,
+            level: data.level,
+            portraitUrl: data.portraitUrl,
           },
         })
 
       case 'npc':
         return await prisma.nPC.create({
           data: {
-            ...serializedData,
-            npcJson: data as Prisma.InputJsonValue, // Store the full NPC object
-            userId: userId,
-            autoSave: true,
-            expiresAt,
+            ...commonData,
+            name: data.name,
+            race: data.race,
+            role: data.role,
+            portraitUrl: data.portraitUrl,
           },
         })
 
       case 'world':
         return await prisma.world.create({
           data: {
-            ...serializedData,
-            worldJson: data as Prisma.InputJsonValue, // Store the full world object
-            userId: userId,
-            autoSave: true,
-            expiresAt,
+            ...commonData,
+            name: data.name,
+            theme: data.theme,
+            landName: data.landName,
           },
         })
 
       case 'item':
         return await prisma.item.create({
           data: {
-            ...serializedData,
-            itemJson: data as Prisma.InputJsonValue, // Store the full item object
-            userId: userId,
-            autoSave: true,
-            expiresAt,
+            ...commonData,
+            name: data.name,
+            itemType: data.itemType,
+            theme: data.theme,
+            rarity: data.rarity,
           },
         })
 
       case 'quest':
         return await prisma.quest.create({
           data: {
-            ...serializedData,
-            questJson: data as Prisma.InputJsonValue, // Store the full quest object
-            userId: userId,
-            autoSave: true,
-            expiresAt,
+            ...commonData,
+            title: data.title,
           },
         })
 
       case 'encounter':
         return await prisma.encounter.create({
           data: {
-            ...serializedData,
-            encounterJson: data as Prisma.InputJsonValue, // Store the full encounter object
-            userId: userId,
-            autoSave: true,
-            expiresAt,
+            ...commonData,
+            name: data.name,
           },
         })
 
       case 'campaign':
         return await prisma.campaign.create({
           data: {
-            ...serializedData,
-            campaignJson: data as Prisma.InputJsonValue, // Store the full campaign object
-            userId: userId,
-            autoSave: true,
-            expiresAt,
+            ...commonData,
+            name: data.name,
+            description: data.description,
+            characterSlots: data.characterSlots,
+            status: data.status,
           },
         })
 
