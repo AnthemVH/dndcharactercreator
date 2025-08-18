@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { openRouterQueue } from '@/lib/queue'
 import { deductTokens, hasEnoughTokens } from '@/lib/tokens'
-import { autoSaveContent } from '@/lib/auto-save'
+import { saveContentSingleInstance } from '@/lib/content-manager'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 
@@ -234,21 +234,34 @@ Please return ONLY a valid JSON object with this EXACT structure:
       )
     }
 
-    // Auto-save the generated quest
+    // Auto-save the generated quest using single-instance manager
+    const questData = {
+      ...enhancedQuest,
+      portrait: null // Will be updated later if portrait generation succeeds
+    }
+    
     try {
-      await autoSaveContent({
+      const saveResult = await saveContentSingleInstance({
         type: 'quest',
-        data: response,
+        data: questData,
         userId: payload.userId
       })
-      console.log('Quest auto-saved successfully')
+      console.log('Quest auto-saved successfully:', saveResult)
+      
+      // Add the saved ID to the quest data for frontend tracking
+      questData.id = saveResult.id
     } catch (autoSaveError) {
       console.error('Auto-save error:', autoSaveError)
       // Don't fail the generation if auto-save fails
     }
 
-    console.log('Quest generated successfully using OpenRouter queue')
-    return NextResponse.json({ quest: response })
+    // Return quest data immediately with save info
+    console.log('Quest generated successfully - returning data immediately')
+    return NextResponse.json({ 
+      quest: questData,
+      portraitPending: !skipPortrait,
+      savedId: questData.id
+    })
   } catch (error) {
     console.error('Quest generation error:', error)
     

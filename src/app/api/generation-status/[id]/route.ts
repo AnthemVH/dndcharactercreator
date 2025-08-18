@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(
   request: NextRequest,
@@ -19,13 +19,13 @@ export async function GET(
 
     const { id: generationId } = await params
     
-    // Get generation status from database
-    const generation = await prisma.generationStatus.findFirst({
-      where: {
-        id: generationId,
-        userId: payload.userId
-      }
-    })
+    const { data: generation, error } = await supabaseAdmin
+      .from('generation_statuses')
+      .select('*')
+      .eq('id', generationId)
+      .eq('user_id', payload.userId)
+      .single()
+    if (error && error.code !== 'PGRST116') throw error
 
     if (!generation) {
       return NextResponse.json({ error: 'Generation not found' }, { status: 404 })
@@ -36,11 +36,11 @@ export async function GET(
       status: generation.status,
       progress: generation.progress,
       stage: generation.stage,
-      estimatedTime: generation.estimatedTime,
+      estimatedTime: generation.estimated_time,
       result: generation.result,
       error: generation.error,
-      createdAt: generation.createdAt,
-      updatedAt: generation.updatedAt
+      createdAt: generation.created_at,
+      updatedAt: generation.updated_at
     })
   } catch (error) {
     console.error('Error fetching generation status:', error)
@@ -71,43 +71,32 @@ export async function POST(
     const { status, progress, stage, estimatedTime, result, error } = body
 
     // Update or create generation status
-    const generation = await prisma.generationStatus.upsert({
-      where: {
-        id: generationId
-      },
-      update: {
-        status,
-        progress,
-        stage,
-        estimatedTime,
-        result: result ? JSON.stringify(result) : null,
-        error,
-        updatedAt: new Date()
-      },
-      create: {
+    const { data: generation } = await supabaseAdmin
+      .from('generation_statuses')
+      .upsert({
         id: generationId,
-        userId: payload.userId,
+        user_id: payload.userId,
         status,
         progress,
         stage,
-        estimatedTime,
-        result: result ? JSON.stringify(result) : null,
-        error,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      }
-    })
+        estimated_time: estimatedTime ?? 0,
+        result: result ?? null,
+        error: error ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .select('*')
+      .single()
 
     return NextResponse.json({
       id: generation.id,
       status: generation.status,
       progress: generation.progress,
       stage: generation.stage,
-      estimatedTime: generation.estimatedTime,
-      result: generation.result ? JSON.parse(generation.result) : null,
+      estimatedTime: generation.estimated_time,
+      result: generation.result ?? null,
       error: generation.error,
-      createdAt: generation.createdAt,
-      updatedAt: generation.updatedAt
+      createdAt: generation.created_at,
+      updatedAt: generation.updated_at
     })
   } catch (error) {
     console.error('Error updating generation status:', error)

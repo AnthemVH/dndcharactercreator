@@ -91,18 +91,59 @@ export function loadFromLocalStorage<T>(key: string, defaultValue: T): T {
 }
 
 /**
- * Parses a JSON string back to an array, with fallback for non-JSON strings
+ * Parses a variety of field formats back to a string array.
+ * Accepts:
+ * - stringified JSON arrays
+ * - pipe-separated legacy strings (e.g., "a|b|c")
+ * - native arrays
+ * - plain objects (uses object values)
  */
-export function parseArrayField(field: string | null | undefined): string[] {
-  if (!field) return []
-  
-  try {
-    const parsed = JSON.parse(field)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    // If it's not valid JSON, treat it as a pipe-separated string (legacy format)
-    return field.split('|').filter(item => item.trim() !== '')
+export function parseArrayField(field: unknown): string[] {
+  if (field == null) return []
+
+  // If already an array, coerce items to strings
+  if (Array.isArray(field)) {
+    return field
+      .map(item => String(item))
+      .map(item => item.trim())
+      .filter(item => item !== '')
   }
+
+  // If it's a string, try JSON first then fallback to legacy format
+  if (typeof field === 'string') {
+    const stringValue = field.trim()
+    if (stringValue === '') return []
+    try {
+      const parsed = JSON.parse(stringValue)
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map(item => String(item))
+          .map(item => item.trim())
+          .filter(item => item !== '')
+      }
+    } catch {
+      // not JSON, continue to fallback
+    }
+    return stringValue
+      .split('|')
+      .map(item => item.trim())
+      .filter(item => item !== '')
+  }
+
+  // If it's a plain object (including Set/Map like objects), use values
+  if (typeof field === 'object') {
+    try {
+      const values = Object.values(field as Record<string, unknown>)
+      return values
+        .map(item => String(item))
+        .map(item => item.trim())
+        .filter(item => item !== '')
+    } catch {
+      return []
+    }
+  }
+
+  return []
 }
 
 /**

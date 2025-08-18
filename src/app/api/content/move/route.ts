@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,99 +18,42 @@ export async function POST(request: NextRequest) {
     const { itemId, itemType, campaignId } = await request.json()
     const userId = payload.userId
 
-    let item: unknown
-
-    // Find the item based on type (handle both singular and plural)
-    switch (itemType) {
-      case 'character':
-      case 'characters':
-        item = await prisma.character.findFirst({
-          where: { id: itemId, userId }
-        })
-        break
-      case 'npc':
-      case 'npcs':
-        item = await prisma.NPC.findFirst({
-          where: { id: itemId, userId }
-        })
-        break
-      case 'world':
-      case 'worlds':
-        item = await prisma.world.findFirst({
-          where: { id: itemId, userId }
-        })
-        break
-      case 'item':
-      case 'items':
-        item = await prisma.item.findFirst({
-          where: { id: itemId, userId }
-        })
-        break
-      case 'quest':
-      case 'quests':
-        item = await prisma.quest.findFirst({
-          where: { id: itemId, userId }
-        })
-        break
-      case 'encounter':
-      case 'encounters':
-        item = await prisma.encounter.findFirst({
-          where: { id: itemId, userId }
-        })
-        break
-      default:
-        return NextResponse.json({ error: 'Invalid item type' }, { status: 400 })
+    const tableMap: Record<string, string> = {
+      character: 'characters',
+      characters: 'characters',
+      npc: 'npcs',
+      npcs: 'npcs',
+      world: 'worlds',
+      worlds: 'worlds',
+      item: 'items',
+      items: 'items',
+      quest: 'quests',
+      quests: 'quests',
+      encounter: 'encounters',
+      encounters: 'encounters',
+    }
+    const table = tableMap[itemType]
+    if (!table) {
+      return NextResponse.json({ error: 'Invalid item type' }, { status: 400 })
     }
 
-    if (!item) {
+    // Ensure the row exists and belongs to the user
+    const { data: existing, error: findErr } = await supabaseAdmin
+      .from(table)
+      .select('id,user_id')
+      .eq('id', itemId)
+      .eq('user_id', userId)
+      .single()
+    if (findErr) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 })
     }
 
-    // Update the item with campaign ID (handle both singular and plural)
-    switch (itemType) {
-      case 'character':
-      case 'characters':
-        await prisma.character.update({
-          where: { id: itemId },
-          data: { campaignId }
-        })
-        break
-      case 'npc':
-      case 'npcs':
-        await prisma.NPC.update({
-          where: { id: itemId },
-          data: { campaignId }
-        })
-        break
-      case 'world':
-      case 'worlds':
-        await prisma.world.update({
-          where: { id: itemId },
-          data: { campaignId }
-        })
-        break
-      case 'item':
-      case 'items':
-        await prisma.item.update({
-          where: { id: itemId },
-          data: { campaignId }
-        })
-        break
-      case 'quest':
-      case 'quests':
-        await prisma.quest.update({
-          where: { id: itemId },
-          data: { campaignId }
-        })
-        break
-      case 'encounter':
-      case 'encounters':
-        await prisma.encounter.update({
-          where: { id: itemId },
-          data: { campaignId }
-        })
-        break
-    }
+    const { error: updErr } = await supabaseAdmin
+      .from(table)
+      .update({ campaign_id: campaignId })
+      .eq('id', itemId)
+      .eq('user_id', userId)
+    if (updErr) throw updErr
 
     return NextResponse.json({ success: true })
   } catch (error) {

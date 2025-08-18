@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { convertToPermanent } from '@/lib/auto-save'
+import { makeContentPermanent } from '@/lib/content-manager'
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,26 +16,26 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { type, id } = body
+    const { id, type } = body
 
-    if (!type || !id) {
-      return NextResponse.json(
-        { error: 'Type and ID are required' },
-        { status: 400 }
-      )
+    console.log('Convert to permanent request:', { id, type, userId: payload.userId })
+
+    if (!id || !type) {
+      return NextResponse.json({ error: 'Missing id or type' }, { status: 400 })
     }
 
-    // Convert the content to permanent
-    await convertToPermanent(id, type)
-    
+    // Use the new content manager
+    await makeContentPermanent(id, type, payload.userId)
+
     return NextResponse.json({ 
-      success: true,
-      message: 'Content converted to permanent successfully'
+      success: true, 
+      message: 'Content converted to permanent successfully' 
     })
+    
   } catch (error) {
     console.error('Convert to permanent error:', error)
     return NextResponse.json(
-      { error: 'Failed to convert content to permanent' },
+      { error: error instanceof Error ? error.message : 'Failed to convert content to permanent' },
       { status: 500 }
     )
   }

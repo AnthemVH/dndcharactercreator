@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { openRouterQueue } from '@/lib/queue'
 import { deductTokens, hasEnoughTokens } from '@/lib/tokens'
-import { autoSaveContent } from '@/lib/auto-save'
+import { saveContentSingleInstance } from '@/lib/content-manager'
+import { cleanAIResponse, normalizeData } from '@/lib/ai-response-cleaner'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 
@@ -106,10 +107,10 @@ JSON only:
       )
     }
 
-    // Use the queue system for OpenRouter API calls
+    // Use the queue system for OpenRouter API calls with priority
     const response = await openRouterQueue.add(async () => {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000) // Reduced to 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 45000) // Increased to 45 second timeout
       
       const apiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -134,6 +135,7 @@ JSON only:
           ],
           temperature: 0.7,
           max_tokens: 8000,
+          stream: false
         }),
       })
 
@@ -162,17 +164,49 @@ JSON only:
     console.log('OpenRouter response:', JSON.stringify(data, null, 2))
     
     // Check if response was truncated
-    if (data.choices[0].finish_reason === 'length') {
+    const finishReason = data?.choices?.[0]?.finish_reason
+    if (finishReason === 'length') {
       console.warn('Response was truncated due to token limit')
     }
     
     // OpenRouter returns content in content field
-    const content = data.choices[0].message.content || ''
+    const rawContent = data?.choices?.[0]?.message?.content
+    const content = (() => {
+      if (typeof rawContent === 'string') return rawContent
+      if (Array.isArray(rawContent)) {
+        // Some models return content as an array of parts
+        return rawContent
+          .map((part: any) => {
+            if (typeof part === 'string') return part
+            if (part && typeof part.text === 'string') return part.text
+            if (part && typeof part.content === 'string') return part.content
+            return ''
+          })
+          .join('')
+      }
+      if (rawContent && typeof rawContent === 'object') {
+        if (typeof (rawContent as any).text === 'string') return (rawContent as any).text
+        if (typeof (rawContent as any).content === 'string') return (rawContent as any).content
+      }
+      return ''
+    })()
 
-    // Extract JSON from the response with better error handling
+    // Clean and parse the AI response using improved utility
     let character
     try {
-      // First, try to parse the entire content directly
+      const cleaned = cleanAIResponse(content)
+      character = normalizeData(cleaned.data)
+      
+      if (cleaned.wasFixed) {
+        console.log('AI response required cleaning, but was successfully parsed')
+      }
+      
+      if (cleaned.errors.length > 0) {
+        console.warn('AI response cleaning warnings:', cleaned.errors)
+      }
+    } catch (cleaningError) {
+      console.error('AI response cleaning failed:', cleaningError)
+      // Fallback to original parsing logic
       try {
         character = JSON.parse(content.trim())
       } catch (directParseError) {
@@ -207,7 +241,7 @@ JSON only:
           let fixedJson = jsonString.replace(/,\s*$/, '') // Remove trailing comma
           
           // If response was truncated, try to complete the JSON structure
-          if (data.choices[0].finish_reason === 'length') {
+          if (finishReason === 'length') {
             // Try to find the last complete object and close it
             const lastBraceIndex = fixedJson.lastIndexOf('}')
             if (lastBraceIndex > 0) {
@@ -227,24 +261,48 @@ JSON only:
           }
         }
       }
-    } catch (error) {
-      console.error('JSON extraction error:', error)
-      return NextResponse.json(
-        { error: 'Failed to extract character data from AI response' },
-        { status: 500 }
-      )
     }
 
     // Validate and enhance the character data
+    const normalizeStringArray = (val: any) => {
+      if (Array.isArray(val)) return val.map((v) => String(v))
+      if (typeof val === 'string') {
+        return val
+          .split(/[\n,;]+/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+      }
+      return []
+    }
+
+    const safeStats = {
+      STR: Number.isFinite(character?.stats?.STR) ? character.stats.STR : 10,
+      DEX: Number.isFinite(character?.stats?.DEX) ? character.stats.DEX : 10,
+      CON: Number.isFinite(character?.stats?.CON) ? character.stats.CON : 10,
+      INT: Number.isFinite(character?.stats?.INT) ? character.stats.INT : 10,
+      WIS: Number.isFinite(character?.stats?.WIS) ? character.stats.WIS : 10,
+      CHA: Number.isFinite(character?.stats?.CHA) ? character.stats.CHA : 10,
+    }
+
     const enhancedCharacter = {
       ...character,
-      level: character.level || 1,
-      hitPoints: character.hitPoints || (character.stats.CON * 2 + 10),
-      armorClass: character.armorClass || 10,
-      initiative: character.initiative || Math.floor((character.stats.DEX - 10) / 2),
-      speed: character.speed || 30,
-      proficiencies: character.proficiencies || ['Common'],
-      features: character.features || ['Class Feature 1', 'Class Feature 2'],
+      stats: safeStats,
+      personalityTraits: normalizeStringArray(character?.personalityTraits),
+      level: Number.isFinite(character?.level) ? character.level : 1,
+      hitPoints: Number.isFinite(character?.hitPoints)
+        ? character.hitPoints
+        : safeStats.CON * 2 + 10,
+      armorClass: Number.isFinite(character?.armorClass) ? character.armorClass : 10,
+      initiative: Number.isFinite(character?.initiative)
+        ? character.initiative
+        : Math.floor((safeStats.DEX - 10) / 2),
+      speed: Number.isFinite(character?.speed) ? character.speed : 30,
+      proficiencies: normalizeStringArray(character?.proficiencies).length
+        ? normalizeStringArray(character?.proficiencies)
+        : ['Common'],
+      features: normalizeStringArray(character?.features).length
+        ? normalizeStringArray(character?.features)
+        : ['Class Feature 1', 'Class Feature 2'],
     }
 
     // Deduct tokens after successful character generation
@@ -256,29 +314,33 @@ JSON only:
       )
     }
 
-    // Auto-save the generated character (without portrait for now)
+    // Auto-save the generated character using single-instance manager
     const characterData = {
       ...enhancedCharacter,
       portrait: null // Will be updated later if portrait generation succeeds
     }
     
     try {
-      const savedCharacter = await autoSaveContent({
+      const saveResult = await saveContentSingleInstance({
         type: 'character',
         data: characterData,
         userId: payload.userId
       })
-      console.log('Character auto-saved successfully')
+      console.log('Character auto-saved successfully:', saveResult)
+      
+      // Add the saved ID to the character data for frontend tracking
+      characterData.id = saveResult.id
     } catch (autoSaveError) {
       console.error('Auto-save error:', autoSaveError)
       // Don't fail the generation if auto-save fails
     }
 
-    // Return character data immediately
+    // Return character data immediately with save info
     console.log('Character generated successfully - returning data immediately')
     return NextResponse.json({ 
       character: characterData,
-      portraitPending: !skipPortrait
+      portraitPending: !skipPortrait,
+      savedId: characterData.id
     })
   } catch (error) {
     console.error('Character generation error:', error)

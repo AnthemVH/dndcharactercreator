@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function DELETE(
   request: NextRequest,
@@ -21,13 +21,12 @@ export async function DELETE(
     const userId = payload.userId
     const { id: itemId } = await params
 
-    // Delete the item
-    await prisma.item.delete({
-      where: {
-        id: itemId,
-        userId: userId // Ensure user owns the item
-      }
-    })
+    const { error } = await supabaseAdmin
+      .from('items')
+      .delete()
+      .eq('id', itemId)
+      .eq('user_id', userId)
+    if (error) throw error
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -55,19 +54,24 @@ export async function GET(
     const userId = payload.userId
     const { id: itemId } = await params
 
-    // Get the item
-    const item = await prisma.item.findFirst({
-      where: {
-        id: itemId,
-        userId: userId
-      }
-    })
+    const { data: item, error } = await supabaseAdmin
+      .from('items')
+      .select('*')
+      .eq('id', itemId)
+      .eq('user_id', userId)
+      .single()
+    if (error && error.code !== 'PGRST116') throw error
 
     if (!item) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 })
     }
 
-    return NextResponse.json(item)
+    const merged = {
+      ...(item as any).data,
+      ...(item as any),
+      portrait: (item as any).portrait_url || (item as any).data?.portrait || (item as any).data?.portrait_url,
+    }
+    return NextResponse.json(merged)
   } catch (error) {
     console.error('Item fetch error:', error)
     return NextResponse.json({ error: 'Failed to fetch item' }, { status: 500 })

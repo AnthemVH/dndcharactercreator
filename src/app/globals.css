@@ -842,13 +842,39 @@ input:focus, textarea:focus, select:focus {
     border-color: #505050 !important;
   }
   
-  /* Override any white backgrounds */
+  /* Override any white backgrounds except our search-bar-light wrapper */
   [class*="bg-white"],
   [class*="bg-gray-50"],
   [class*="bg-slate-50"],
   [class*="bg-zinc-50"],
   [class*="bg-neutral-50"] {
     background-color: #2a2a2a !important;
+  }
+
+  .search-bar-light input[type="text"],
+  .search-bar-light select {
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    border-color: #d1d5db !important;
+  }
+  /* Extremely specific override to beat heavier selectors */
+  .search-bar-light .search-input,
+  .search-bar-light input.search-input[type="text"] {
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    border-color: #d1d5db !important;
+  }
+  .search-bar-light input::placeholder {
+    color: #6b7280 !important; /* text-gray-500 */
+  }
+  .search-bar-light select option {
+    background-color: #ffffff !important;
+    color: #111827 !important;
+  }
+  .search-bar-light button {
+    background-color: #ffffff !important;
+    color: #111827 !important;
+    border-color: #d1d5db !important;
   }
   
   /* Override any light grey backgrounds */

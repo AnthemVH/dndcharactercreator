@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export const runtime = 'nodejs'
 
@@ -12,17 +12,19 @@ export async function PATCH(
     const body = await request.json()
     const { status, adminNotes, reviewedBy, reviewedAt } = body
 
-    // Update feedback
-    const feedback = await prisma.feedback.update({
-      where: { id },
-      data: {
+    const { data: feedback, error } = await supabaseAdmin
+      .from('feedback')
+      .update({
         status,
-        adminNotes,
-        reviewedBy,
-        reviewedAt: reviewedAt ? new Date(reviewedAt) : null,
-        updatedAt: new Date()
-      }
-    })
+        admin_notes: adminNotes ?? null,
+        reviewed_by: reviewedBy ?? null,
+        reviewed_at: reviewedAt ? new Date(reviewedAt).toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select('*')
+      .single()
+    if (error) throw error
 
     return NextResponse.json(feedback)
   } catch (error) {
@@ -41,10 +43,11 @@ export async function DELETE(
   try {
     const { id } = await params
 
-    // Delete feedback
-    await prisma.feedback.delete({
-      where: { id }
-    })
+    const { error } = await supabaseAdmin
+      .from('feedback')
+      .delete()
+      .eq('id', id)
+    if (error) throw error
 
     return NextResponse.json({ message: 'Feedback deleted successfully' })
   } catch (error) {

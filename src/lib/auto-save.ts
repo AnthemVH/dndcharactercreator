@@ -1,6 +1,5 @@
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 import { cleanupExpiredImages } from './image-storage'
-import { Prisma } from '@prisma/client'
 
 export interface AutoSaveContent {
   type: 'character' | 'npc' | 'item' | 'quest' | 'encounter' | 'world' | 'campaign'
@@ -14,87 +13,76 @@ export interface AutoSaveContent {
 export async function autoSaveContent({ type, data, userId }: AutoSaveContent) {
   try {
     const expiresAt = new Date()
-    expiresAt.setDate(expiresAt.getDate() + 30) // 30 days from now
+    expiresAt.setDate(expiresAt.getDate() + 30)
 
     const commonData = {
-      userId: userId,
-      autoSave: true,
-      expiresAt,
-      data: data as Prisma.InputJsonValue,
+      user_id: userId,
+      auto_save: true,
+      expires_at: expiresAt.toISOString(),
+      data,
+    }
+
+    const insert = async (table: string, row: Record<string, any>) => {
+      const { data: inserted, error } = await supabaseAdmin
+        .from(table)
+        .insert(row)
+        .select('*')
+        .single()
+      if (error) throw error
+      return inserted
     }
 
     switch (type) {
       case 'character':
-        return await prisma.character.create({
-          data: {
-            ...commonData,
-            name: data.name,
-            race: data.race,
-            class: data.class,
-            level: data.level,
-            portraitUrl: data.portraitUrl,
-          },
+        return await insert('characters', {
+          ...commonData,
+          name: data.name,
+          race: data.race,
+          class: data.class,
+          level: data.level ?? 1,
+          portrait_url: data.portraitUrl ?? null,
         })
-
       case 'npc':
-        return await prisma.nPC.create({
-          data: {
-            ...commonData,
-            name: data.name,
-            race: data.race,
-            role: data.role,
-            portraitUrl: data.portraitUrl,
-          },
+        return await insert('npcs', {
+          ...commonData,
+          name: data.name,
+          race: data.race,
+          role: data.role,
+          portrait_url: data.portraitUrl ?? null,
         })
-
       case 'world':
-        return await prisma.world.create({
-          data: {
-            ...commonData,
-            name: data.name,
-            theme: data.theme,
-            landName: data.landName,
-          },
+        return await insert('worlds', {
+          ...commonData,
+          name: data.name,
+          theme: data.theme,
+          land_name: data.landName,
         })
-
       case 'item':
-        return await prisma.item.create({
-          data: {
-            ...commonData,
-            name: data.name,
-            itemType: data.itemType,
-            theme: data.theme,
-            rarity: data.rarity,
-          },
+        return await insert('items', {
+          ...commonData,
+          name: data.name,
+          item_type: data.itemType,
+          theme: data.theme,
+          rarity: data.rarity,
         })
-
       case 'quest':
-        return await prisma.quest.create({
-          data: {
-            ...commonData,
-            title: data.title,
-          },
+        return await insert('quests', {
+          ...commonData,
+          title: data.title,
         })
-
       case 'encounter':
-        return await prisma.encounter.create({
-          data: {
-            ...commonData,
-            name: data.name,
-          },
+        return await insert('encounters', {
+          ...commonData,
+          name: data.name,
         })
-
       case 'campaign':
-        return await prisma.campaign.create({
-          data: {
-            ...commonData,
-            name: data.name,
-            description: data.description,
-            characterSlots: data.characterSlots,
-            status: data.status,
-          },
+        return await insert('campaigns', {
+          ...commonData,
+          name: data.name,
+          description: data.description,
+          character_slots: data.characterSlots,
+          status: data.status ?? 'active',
         })
-
       default:
         throw new Error(`Unknown content type: ${type}`)
     }
@@ -109,69 +97,30 @@ export async function autoSaveContent({ type, data, userId }: AutoSaveContent) {
  */
 export async function cleanupExpiredContent() {
   try {
-    const now = new Date()
+    const nowIso = new Date().toISOString()
 
-    // Delete expired auto-saved content from all tables
-    const results = await Promise.all([
-      prisma.character.deleteMany({
-        where: {
-          autoSave: true,
-          expiresAt: {
-            lt: now,
-          },
-        },
-      }),
-      prisma.nPC.deleteMany({
-        where: {
-          autoSave: true,
-          expiresAt: {
-            lt: now,
-          },
-        },
-      }),
-      prisma.world.deleteMany({
-        where: {
-          autoSave: true,
-          expiresAt: {
-            lt: now,
-          },
-        },
-      }),
-      prisma.item.deleteMany({
-        where: {
-          autoSave: true,
-          expiresAt: {
-            lt: now,
-          },
-        },
-      }),
-      prisma.quest.deleteMany({
-        where: {
-          autoSave: true,
-          expiresAt: {
-            lt: now,
-          },
-        },
-      }),
-      prisma.encounter.deleteMany({
-        where: {
-          autoSave: true,
-          expiresAt: {
-            lt: now,
-          },
-        },
-      }),
-      prisma.campaign.deleteMany({
-        where: {
-          autoSave: true,
-          expiresAt: {
-            lt: now,
-          },
-        },
-      }),
+    const countDeleted = async (table: string) => {
+      const { data, error, count } = await supabaseAdmin
+        .from(table)
+        .delete()
+        .eq('auto_save', true)
+        .lt('expires_at', nowIso)
+        .select('*', { count: 'exact' })
+      if (error) throw error
+      return count ?? (data?.length ?? 0)
+    }
+
+    const counts = await Promise.all([
+      countDeleted('characters'),
+      countDeleted('npcs'),
+      countDeleted('worlds'),
+      countDeleted('items'),
+      countDeleted('quests'),
+      countDeleted('encounters'),
+      countDeleted('campaigns'),
     ])
 
-    const totalDeleted = results.reduce((sum, result) => sum + result.count, 0)
+    const totalDeleted = counts.reduce((a, b) => a + b, 0)
     console.log(`Cleaned up ${totalDeleted} expired auto-saved items`)
     
     // Also cleanup expired images
@@ -190,73 +139,26 @@ export async function cleanupExpiredContent() {
  */
 export async function convertToPermanent(id: string, type: string) {
   try {
-    switch (type) {
-      case 'character':
-        return await prisma.character.update({
-          where: { id },
-          data: {
-            autoSave: false,
-            expiresAt: null,
-          },
-        })
-
-      case 'npc':
-        return await prisma.nPC.update({
-          where: { id },
-          data: {
-            autoSave: false,
-            expiresAt: null,
-          },
-        })
-
-      case 'world':
-        return await prisma.world.update({
-          where: { id },
-          data: {
-            autoSave: false,
-            expiresAt: null,
-          },
-        })
-
-      case 'item':
-        return await prisma.item.update({
-          where: { id },
-          data: {
-            autoSave: false,
-            expiresAt: null,
-          },
-        })
-
-      case 'quest':
-        return await prisma.quest.update({
-          where: { id },
-          data: {
-            autoSave: false,
-            expiresAt: null,
-          },
-        })
-
-      case 'encounter':
-        return await prisma.encounter.update({
-          where: { id },
-          data: {
-            autoSave: false,
-            expiresAt: null,
-          },
-        })
-
-      case 'campaign':
-        return await prisma.campaign.update({
-          where: { id },
-          data: {
-            autoSave: false,
-            expiresAt: null,
-          },
-        })
-
-      default:
-        throw new Error(`Unknown content type: ${type}`)
+    const tableMap: Record<string, string> = {
+      characters: 'characters',
+      npcs: 'npcs',
+      worlds: 'worlds',
+      items: 'items',
+      quests: 'quests',
+      encounters: 'encounters',
+      campaigns: 'campaigns',
     }
+    const table = tableMap[type]
+    if (!table) throw new Error(`Unknown content type: ${type}`)
+
+    const { data, error } = await supabaseAdmin
+      .from(table)
+      .update({ auto_save: false, expires_at: null })
+      .eq('id', id)
+      .select('*')
+      .single()
+    if (error) throw error
+    return data
   } catch (error) {
     console.error('Convert to permanent error:', error)
     throw error

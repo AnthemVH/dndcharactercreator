@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export const runtime = 'nodejs'
 
@@ -16,17 +16,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Save feedback to database
-    const feedback = await prisma.feedback.create({
-      data: {
+    const { data: feedback, error } = await supabaseAdmin
+      .from('feedback')
+      .insert({
         name: name.trim(),
         email: email?.trim() || null,
-        feedbackType,
+        feedback_type: feedbackType,
         rating: rating || null,
         message: message.trim(),
         status: 'new'
-      }
-    })
+      })
+      .select('*')
+      .single()
+    if (error) throw error
 
     console.log('Feedback saved to database:', feedback)
 
@@ -48,12 +50,11 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Get all feedback (for admin purposes)
-    const feedback = await prisma.feedback.findMany({
-      orderBy: {
-        createdAt: 'desc'
-      }
-    })
+    const { data: feedback, error } = await supabaseAdmin
+      .from('feedback')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (error) throw error
 
     return NextResponse.json(feedback)
   } catch (error) {

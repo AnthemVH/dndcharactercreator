@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { openRouterQueue } from '@/lib/queue'
 import { deductTokens, hasEnoughTokens } from '@/lib/tokens'
-import { autoSaveContent } from '@/lib/auto-save'
+import { saveContentSingleInstance } from '@/lib/content-manager'
 // Portraits handled via /api/portrait-generator
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
@@ -295,29 +295,33 @@ JSON only:
       )
     }
 
-    // Auto-save the generated NPC (without portrait for now)
+    // Auto-save the generated NPC using single-instance manager
     const npcData = {
       ...enhancedNPC,
       portrait: null // Will be updated later if portrait generation succeeds
     }
     
     try {
-      const savedNPC = await autoSaveContent({
+      const saveResult = await saveContentSingleInstance({
         type: 'npc',
         data: npcData,
         userId: payload.userId
       })
-      console.log('NPC auto-saved successfully')
+      console.log('NPC auto-saved successfully:', saveResult)
+      
+      // Add the saved ID to the NPC data for frontend tracking
+      npcData.id = saveResult.id
     } catch (autoSaveError) {
       console.error('Auto-save error:', autoSaveError)
       // Don't fail the generation if auto-save fails
     }
 
-    // Return NPC data immediately
+    // Return NPC data immediately with save info
     console.log('NPC generated successfully - returning data immediately')
     return NextResponse.json({ 
       npc: npcData,
-      portraitPending: !skipPortrait
+      portraitPending: !skipPortrait,
+      savedId: npcData.id
     })
   } catch (error) {
     console.error('NPC generation error:', error)

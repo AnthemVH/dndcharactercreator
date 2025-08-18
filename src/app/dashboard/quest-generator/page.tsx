@@ -8,6 +8,8 @@ import { clearLocalStorageState, saveToLocalStorage, loadFromLocalStorage } from
 import { generatorStateManager } from '@/lib/generator-state'
 import FantasyToggle from '@/components/FantasyToggle'
 import GenerationStatusPanel from '@/components/GenerationStatusPanel'
+import FantasyNotification, { useNotifications } from '@/components/FantasyNotification'
+import { formatArrayField, formatTextField, getListClasses, getSectionTitle } from '@/lib/content-formatter'
 
 interface QuestForm {
   name?: string
@@ -17,6 +19,7 @@ interface QuestForm {
 }
 
 interface GeneratedQuest {
+  id?: string
   name: string
   type: string
   difficulty: string
@@ -67,6 +70,9 @@ export default function QuestGenerator() {
     stage: 'complete'
   })
   const [isUpdatingFromState, setIsUpdatingFromState] = useState(false)
+  
+  // Notification system
+  const { notifications, removeNotification, showSuccess, showError } = useNotifications()
   const [isPortraitLoading, setIsPortraitLoading] = useState(false)
 
   // Load state from global state manager on component mount
@@ -314,7 +320,16 @@ export default function QuestGenerator() {
 
       const data = await response.json()
       
-      setQuest(data.quest)
+      // Normalize quest data to ensure it has the saved ID
+      const normalizedQuest = {
+        id: data.savedId, // Add the saved ID from the API
+        ...data.quest
+      }
+      
+      setQuest(normalizedQuest)
+      
+      // Show autosave notification
+      showSuccess('Quest generated and autosaved!')
       
       setGenerationStatus({
         status: getStatusMessage('complete'),
@@ -326,8 +341,8 @@ export default function QuestGenerator() {
       setError(null)
       
       if (data.portraitPending) {
-        console.log('Starting portrait generation for quest:', data.quest.name)
-        generatePortrait(data.quest)
+        console.log('Starting portrait generation for quest:', normalizedQuest.name)
+        generatePortrait(normalizedQuest)
       } else {
         console.log('Portrait generation skipped:', {
           portraitPending: data.portraitPending
@@ -514,17 +529,29 @@ export default function QuestGenerator() {
       }
 
       const result = await response.json()
-      alert('Quest saved successfully!')
+      
+      // Update the quest with the returned ID if it's a new save
+      if (result.id && !quest.id) {
+        setQuest(prev => prev ? { ...prev, id: result.id } : null)
+      }
+      
+      // Show success notification based on whether it was updated or newly saved
+      if (result.isNew) {
+        showSuccess('Quest saved successfully!')
+      } else {
+        showSuccess('Quest updated successfully!')
+      }
     } catch (error) {
       console.error('Quest saving error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to save quest. Please try again.'
       setError(errorMessage)
-      alert(`Error saving quest: ${errorMessage}`)
+      showError(errorMessage)
     }
   }
 
   return (
     <div className="min-h-screen fantasy-main">
+      <FantasyNotification notifications={notifications} onDismiss={removeNotification} />
       <GenerationStatusPanel />
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">

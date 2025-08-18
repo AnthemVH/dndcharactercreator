@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { openRouterQueue } from '@/lib/queue'
 import { deductTokens, hasEnoughTokens } from '@/lib/tokens'
-import { autoSaveContent } from '@/lib/auto-save'
+import { saveContentSingleInstance } from '@/lib/content-manager'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 
@@ -298,21 +298,34 @@ Make the world rich and detailed with interconnected elements. Keep all descript
       )
     }
 
-    // Auto-save the generated world
+    // Auto-save the generated world lore using single-instance manager
+    const worldData = {
+      ...enhancedWorld,
+      portrait: null // Will be updated later if portrait generation succeeds
+    }
+    
     try {
-      await autoSaveContent({
+      const saveResult = await saveContentSingleInstance({
         type: 'world',
-        data: enhancedWorld,
+        data: worldData,
         userId: payload.userId
       })
-      console.log('World auto-saved successfully')
+      console.log('World lore auto-saved successfully:', saveResult)
+      
+      // Add the saved ID to the world data for frontend tracking
+      worldData.id = saveResult.id
     } catch (autoSaveError) {
       console.error('Auto-save error:', autoSaveError)
       // Don't fail the generation if auto-save fails
     }
 
-    console.log('World generated successfully using OpenRouter queue')
-    return NextResponse.json({ world: enhancedWorld })
+    // Return world data immediately with save info
+    console.log('World lore generated successfully - returning data immediately')
+    return NextResponse.json({ 
+      world: worldData,
+      portraitPending: false, // Changed to false as portrait is not generated here
+      savedId: worldData.id
+    })
   } catch (error) {
     console.error('World generation error:', error)
     

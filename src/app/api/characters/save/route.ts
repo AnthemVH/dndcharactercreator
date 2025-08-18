@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { autoSaveContent } from '@/lib/auto-save'
+import { saveContentSingleInstance } from '@/lib/content-manager'
 import { saveImageToDatabase } from '@/lib/image-storage'
-import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,7 +23,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No character data provided' }, { status: 400 })
     }
 
-    // Save the character to the database
+    // Use single-instance content manager
     try {
       console.log('Saving character with data:', {
         name: character.name,
@@ -34,57 +33,46 @@ export async function POST(request: NextRequest) {
         portraitUrl: character.portraitUrl
       })
       
-      const savedCharacter = await autoSaveContent({
+      const saveResult = await saveContentSingleInstance({
         type: 'character',
         data: character,
         userId: payload.userId
       })
       
-      console.log('Character auto-saved with ID:', savedCharacter.id)
-      
-      // Update with portrait URL if it exists
-      if (character.portraitUrl && savedCharacter) {
-        await prisma.character.update({
-          where: { id: savedCharacter.id },
-          data: { portraitUrl: character.portraitUrl }
-        })
-        console.log('Updated character with portraitUrl:', character.portraitUrl)
-      }
+      console.log('Character saved with result:', saveResult)
       
       // Save the image to the database if it exists
-      if (character.portrait && savedCharacter) {
+      if (character.portrait && saveResult.id) {
         try {
           await saveImageToDatabase(
             character.portrait,
+            saveResult.id,
             'character',
-            savedCharacter.id,
-            payload.userId,
-            false // not auto-save
+            payload.userId
           )
-          console.log('Character image saved to database')
-        } catch (imageSaveError) {
-          console.error('Image save error:', imageSaveError)
-          // Don't fail the save if image save fails
+          console.log('Character portrait saved to database')
+        } catch (imageError) {
+          console.error('Failed to save character portrait:', imageError)
+          // Don't fail the save if image saving fails
         }
       }
       
-      console.log('Character saved successfully')
-      return NextResponse.json({ 
-        success: true,
-        character: savedCharacter
+      return NextResponse.json({
+        id: saveResult.id,
+        isNew: saveResult.isNew,
+        autoSave: saveResult.autoSave,
+        message: saveResult.isNew ? 'Character saved successfully' : 'Character updated successfully'
       })
       
-    } catch (autoSaveError) {
-      console.error('Auto-save error:', autoSaveError)
-      return NextResponse.json(
-        { error: 'Failed to save character. Please try again.' },
-        { status: 500 }
-      )
+    } catch (saveError) {
+      console.error('Character save error:', saveError)
+      return NextResponse.json({ error: 'Failed to save character' }, { status: 500 })
     }
+    
   } catch (error) {
-    console.error('Character save error:', error)
+    console.error('Character save route error:', error)
     return NextResponse.json(
-      { error: 'Failed to save character. Please try again.' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

@@ -1,8 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { MessageSquare, Send, Star, ThumbsUp, ThumbsDown, AlertCircle } from 'lucide-react'
-import { showError, showSuccess, notificationManager } from '@/components/FantasyNotification'
+import { MessageSquare, Send, Star, ThumbsUp, ThumbsDown, AlertCircle, CheckCircle } from 'lucide-react'
+import { useNotifications, FantasyNotification } from '@/components/FantasyNotification'
 
 interface FeedbackForm {
   name: string
@@ -34,6 +34,7 @@ const FORM_FIELDS = {
 }
 
 export default function FeedbackPage() {
+  const { notifications, showSuccess, showError, removeNotification } = useNotifications()
   const [form, setForm] = useState<FeedbackForm>({
     name: '',
     email: '',
@@ -82,7 +83,7 @@ export default function FeedbackPage() {
     e.preventDefault()
     
     if (!validateForm()) {
-      showError('Validation Error', 'Please fix the errors below and try again.')
+      showError('Please fix the errors below and try again.')
       return
     }
 
@@ -119,7 +120,7 @@ export default function FeedbackPage() {
       console.log('Feedback submission result:', result)
       
       // Show success toast (corner notification)
-      showSuccess('Thank you!', 'Your feedback has been submitted successfully.')
+      showSuccess('Your feedback has been submitted successfully.')
       
       // Reset form
       setForm({
@@ -135,7 +136,7 @@ export default function FeedbackPage() {
     } catch (error) {
       console.error('=== FEEDBACK SUBMISSION ERROR ===')
       console.error('Error details:', error)
-      showError('Submission Failed', 'There was an error submitting your feedback. Please try again.')
+      showError('There was an error submitting your feedback. Please try again.')
     } finally {
       setIsSubmitting(false)
       console.log('=== FEEDBACK SUBMISSION COMPLETED ===')
@@ -368,47 +369,14 @@ export default function FeedbackPage() {
           </div>
         </div>
 
-        {/* Feedback Status */}
-        {form.feedbackType && (
-          <div className="mt-8 fantasy-card">
-            <div className="flex items-center space-x-3 mb-4">
-              {getFeedbackTypeIcon(form.feedbackType)}
-              <h3 className="fantasy-title text-lg font-semibold">
-                Feedback Preview
-              </h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="font-medium">Type:</span> {form.feedbackType}
-              </div>
-              {form.rating > 0 && (
-                <div>
-                  <span className="font-medium">Rating:</span> {form.rating}/5 stars
-                </div>
-              )}
-              {form.name && (
-                <div>
-                  <span className="font-medium">From:</span> {form.name}
-                </div>
-              )}
-              {form.email && (
-                <div>
-                  <span className="font-medium">Email:</span> {form.email}
-                </div>
-              )}
-            </div>
-            {form.message && (
-              <div className="mt-3">
-                <span className="font-medium">Message:</span>
-                <p className="mt-1 fantasy-text text-sm bg-gray-100 dark:bg-gray-800 p-3 rounded">
-                  {form.message}
-                </p>
-              </div>
-            )}
-          </div>
-        )}
+
       </div>
 
+      {/* Notifications */}
+      <FantasyNotification 
+        notifications={notifications} 
+        onDismiss={removeNotification} 
+      />
       
     </div>
   )

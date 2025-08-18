@@ -6,7 +6,8 @@ import { GenerationStatus, getStatusMessage, getEstimatedTime, getProgressPercen
 import { generatorStateManager } from '@/lib/generator-state'
 import FantasyToggle from '@/components/FantasyToggle'
 import GenerationStatusPanel from '@/components/GenerationStatusPanel'
-import { showSuccess, showError } from '@/components/FantasyNotification'
+import FantasyNotification, { useNotifications } from '@/components/FantasyNotification'
+import { formatArrayField, formatTextField, getListClasses, getSectionTitle } from '@/lib/content-formatter'
 
 interface CampaignForm {
   name?: string
@@ -16,6 +17,7 @@ interface CampaignForm {
 }
 
 interface GeneratedCampaign {
+  id?: string
   name: string
   theme: string
   setting: string
@@ -71,6 +73,8 @@ export default function CampaignGenerator() {
   })
   const [isUpdatingFromState, setIsUpdatingFromState] = useState(false)
   
+  // Notification system
+  const { notifications, removeNotification, showSuccess, showError } = useNotifications()
 
   // Load state from global state manager on component mount
   useEffect(() => {
@@ -323,6 +327,7 @@ export default function CampaignGenerator() {
 
       // Normalize campaign to ensure array fields exist
       const normalizedCampaign: GeneratedCampaign = {
+        id: data.savedId, // Add the saved ID from the API
         ...data.campaign,
         characters: Array.isArray(data.campaign?.characters) ? data.campaign.characters : [],
         locations: Array.isArray(data.campaign?.locations) ? data.campaign.locations : [],
@@ -338,6 +343,10 @@ export default function CampaignGenerator() {
       }
 
       setCampaign(normalizedCampaign)
+      
+      // Show autosave notification
+      showSuccess('Campaign generated and autosaved!')
+      
       // Persist immediately so navigating away/back shows the result
       generatorStateManager.updateState(GENERATOR_TYPE, {
         result: normalizedCampaign,
@@ -435,6 +444,7 @@ export default function CampaignGenerator() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ campaign: campaignToSave }),
       })
 
@@ -443,13 +453,24 @@ export default function CampaignGenerator() {
         throw new Error(errorData.error || 'Failed to save campaign')
       }
 
-      await response.json()
-      showSuccess('Campaign Saved!', 'Your campaign has been saved successfully.')
+      const result = await response.json()
+      
+      // Update the campaign with the returned ID if it's a new save
+      if (result.id && !campaign.id) {
+        setCampaign(prev => prev ? { ...prev, id: result.id } : null)
+      }
+      
+      // Show success notification based on whether it was updated or newly saved
+      if (result.isNew) {
+        showSuccess('Campaign saved successfully!')
+      } else {
+        showSuccess('Campaign updated successfully!')
+      }
     } catch (error) {
       console.error('Campaign saving error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to save campaign. Please try again.'
       setError(errorMessage)
-      showError('Save Failed', errorMessage)
+      showError(errorMessage)
     }
   }
 
@@ -478,6 +499,7 @@ export default function CampaignGenerator() {
 
   return (
     <div className="min-h-screen fantasy-main">
+      <FantasyNotification notifications={notifications} onDismiss={removeNotification} />
       <GenerationStatusPanel />
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">

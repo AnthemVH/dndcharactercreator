@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export interface TokenTransaction {
   id: string
@@ -25,10 +25,12 @@ export const TOKEN_PRICES = {
 // Get user's token balance
 export async function getUserTokens(userId: string): Promise<number> {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { tokens: true }
-    })
+    const { data: user, error } = await supabaseAdmin
+      .from('users')
+      .select('tokens')
+      .eq('id', userId)
+      .single()
+    if (error) throw error
     return user?.tokens || 0
   } catch (error) {
     console.error('Error getting user tokens:', error)
@@ -68,19 +70,18 @@ export async function deductTokens(userId: string, amount: number = 1): Promise<
 // Add tokens (for purchases)
 export async function addTokens(userId: string, amount: number): Promise<void> {
   try {
-    // Check if user exists first
-    const user = await prisma.user.findUnique({
-      where: { id: userId }
-    })
-    
-    if (!user) {
+    const { data: user, error } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('id', userId)
+      .single()
+    if (error || !user) {
       throw new Error(`User ${userId} not found in database`)
     }
-    
+
     const currentTokens = await getUserTokens(userId)
     await updateUserTokens(userId, currentTokens + amount)
-    
-    // Log transaction
+
     await logTokenTransaction({
       id: Date.now().toString(),
       userId,
@@ -109,10 +110,11 @@ export function getTokenPrice(tokens: number): number {
 // Database functions
 async function updateUserTokens(userId: string, newAmount: number): Promise<void> {
   try {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { tokens: newAmount }
-    })
+    const { error } = await supabaseAdmin
+      .from('users')
+      .update({ tokens: newAmount })
+      .eq('id', userId)
+    if (error) throw error
   } catch (error) {
     console.error('Error updating user tokens:', error)
     throw error
@@ -121,16 +123,17 @@ async function updateUserTokens(userId: string, newAmount: number): Promise<void
 
 async function logTokenTransaction(transaction: TokenTransaction): Promise<void> {
   try {
-    await prisma.tokenTransaction.create({
-      data: {
+    const { error } = await supabaseAdmin
+      .from('token_transactions')
+      .insert({
         id: transaction.id,
-        userId: transaction.userId,
+        user_id: transaction.userId,
         type: transaction.type,
         amount: transaction.amount,
         description: transaction.description,
-        timestamp: transaction.timestamp
-      }
-    })
+        timestamp: transaction.timestamp.toISOString(),
+      })
+    if (error) throw error
   } catch (error) {
     console.error('Error logging token transaction:', error)
   }

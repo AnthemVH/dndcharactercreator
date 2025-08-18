@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose'
 import bcrypt from 'bcryptjs'
-import { prisma } from './prisma'
+import { supabaseAdmin } from './supabase'
 
 const JWT_SECRET = process.env.JWT_SECRET || (() => {
   console.warn('JWT_SECRET not set, using fallback. This is not secure for production!')
@@ -42,15 +42,20 @@ export async function verifyToken(token: string): Promise<JWTPayload | null> {
 }
 
 export async function authenticateUser(email: string, password: string) {
-  const user = await prisma.user.findUnique({
-    where: { email }
-  })
+  const { data: user, error } = await supabaseAdmin
+    .from('users')
+    .select('id, email, name, password')
+    .eq('email', email)
+    .single()
+  if (error) {
+    return null
+  }
 
   if (!user) {
     return null
   }
 
-  const isValid = await verifyPassword(password, user.password)
+  const isValid = user.password ? await verifyPassword(password, user.password) : false
   if (!isValid) {
     return null
   }

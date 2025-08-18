@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function DELETE(
   request: NextRequest,
@@ -21,13 +21,12 @@ export async function DELETE(
     const userId = payload.userId
     const { id } = await params
 
-    // Delete the NPC
-    await prisma.nPC.delete({
-      where: {
-        id: id,
-        userId: userId // Ensure user owns the NPC
-      }
-    })
+    const { error } = await supabaseAdmin
+      .from('npcs')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId)
+    if (error) throw error
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -53,18 +52,24 @@ export async function GET(
     }
 
     const { id } = await params
-    const npc = await prisma.nPC.findFirst({
-      where: { 
-        id: id,
-        userId: payload.userId 
-      }
-    })
+    const { data: npc, error } = await supabaseAdmin
+      .from('npcs')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', payload.userId)
+      .single()
+    if (error && error.code !== 'PGRST116') throw error
 
     if (!npc) {
       return NextResponse.json({ error: 'NPC not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ npc })
+    const merged = {
+      ...(npc as any).data,
+      ...(npc as any),
+      portrait: (npc as any).portrait_url || (npc as any).data?.portrait || (npc as any).data?.portrait_url,
+    }
+    return NextResponse.json(merged)
   } catch (error) {
     console.error('NPC fetch error:', error)
     return NextResponse.json({ error: 'Failed to fetch NPC' }, { status: 500 })

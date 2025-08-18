@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { autoSaveContent } from '@/lib/auto-save'
+import { saveContentSingleInstance } from '@/lib/content-manager'
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,31 +22,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No encounter data provided' }, { status: 400 })
     }
 
-    // Save the encounter to the database
+    // Use single-instance content manager
     try {
-      const savedEncounter = await autoSaveContent({
+      console.log('Saving encounter with data:', {
+        name: encounter.name,
+        type: encounter.type,
+        difficulty: encounter.difficulty
+      })
+      
+      const saveResult = await saveContentSingleInstance({
         type: 'encounter',
         data: encounter,
         userId: payload.userId
       })
       
-      console.log('Encounter saved successfully')
-      return NextResponse.json({ 
-        success: true,
-        encounter: savedEncounter
+      console.log('Encounter saved with result:', saveResult)
+      
+      return NextResponse.json({
+        id: saveResult.id,
+        isNew: saveResult.isNew,
+        autoSave: saveResult.autoSave,
+        message: saveResult.isNew ? 'Encounter saved successfully' : 'Encounter updated successfully'
       })
       
-    } catch (autoSaveError) {
-      console.error('Auto-save error:', autoSaveError)
-      return NextResponse.json(
-        { error: 'Failed to save encounter. Please try again.' },
-        { status: 500 }
-      )
+    } catch (saveError) {
+      console.error('Encounter save error:', saveError)
+      return NextResponse.json({ error: 'Failed to save encounter' }, { status: 500 })
     }
+    
   } catch (error) {
-    console.error('Encounter save error:', error)
+    console.error('Encounter save route error:', error)
     return NextResponse.json(
-      { error: 'Failed to save encounter. Please try again.' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

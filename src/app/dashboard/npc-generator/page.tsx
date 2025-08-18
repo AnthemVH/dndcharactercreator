@@ -8,7 +8,8 @@ import { clearLocalStorageState, saveToLocalStorage, loadFromLocalStorage } from
 import { generatorStateManager } from '@/lib/generator-state'
 import FantasyToggle from '@/components/FantasyToggle'
 import GenerationStatusPanel from '@/components/GenerationStatusPanel'
-import { showSuccess, showError } from '@/components/FantasyNotification'
+import FantasyNotification, { useNotifications } from '@/components/FantasyNotification'
+import { formatArrayField, formatTextField, getListClasses, getSectionTitle } from '@/lib/content-formatter'
 import { useUnitSystem } from '@/components/UnitToggle'
 
 interface NpcForm {
@@ -21,6 +22,7 @@ interface NpcForm {
 }
 
 interface GeneratedNpc {
+  id?: string
   name: string
   race: string
   class: string
@@ -83,6 +85,9 @@ export default function NpcGenerator() {
   })
   const [isUpdatingFromState, setIsUpdatingFromState] = useState(false)
   const [isPortraitLoading, setIsPortraitLoading] = useState(false)
+  
+  // Notification system
+  const { notifications, removeNotification, showSuccess, showError } = useNotifications()
 
   // Load state from global state manager on component mount
   useEffect(() => {
@@ -341,6 +346,7 @@ export default function NpcGenerator() {
       const ensureString = (value: unknown, fallback = ''): string => (value == null ? fallback : String(value))
 
       const normalizedNpc: GeneratedNpc = {
+        id: data.savedId, // Add the saved ID from the API
         name: ensureString(data.npc?.name),
         race: ensureString(data.npc?.race),
         class: ensureString(data.npc?.class),
@@ -366,6 +372,9 @@ export default function NpcGenerator() {
       }
 
       setNpc(normalizedNpc)
+      
+      // Show autosave notification
+      showSuccess('NPC generated and autosaved!')
       
       setGenerationStatus({
         status: getStatusMessage('complete'),
@@ -569,17 +578,29 @@ export default function NpcGenerator() {
       }
 
       const result = await response.json()
-      showSuccess('NPC Saved!', 'Your NPC has been saved successfully.')
+      
+      // Update the NPC with the returned ID if it's a new save
+      if (result.id && !npc.id) {
+        setNpc(prev => prev ? { ...prev, id: result.id } : null)
+      }
+      
+      // Show success notification based on whether it was updated or newly saved
+      if (result.isNew) {
+        showSuccess('NPC saved successfully!')
+      } else {
+        showSuccess('NPC updated successfully!')
+      }
     } catch (error) {
       console.error('NPC saving error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to save NPC. Please try again.'
       setError(errorMessage)
-      showError('Save Failed', errorMessage)
+      showError(errorMessage)
     }
   }
 
   return (
     <div className="min-h-screen fantasy-main">
+      <FantasyNotification notifications={notifications} onDismiss={removeNotification} />
       <GenerationStatusPanel />
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
@@ -846,30 +867,30 @@ export default function NpcGenerator() {
                 <div>
                   <h4 className="fantasy-title text-lg font-semibold mb-3">Personality</h4>
                   <div className="flex flex-wrap gap-2">
-                    {toArray(npc.personality).map((trait, index) => (
+                    {formatArrayField(npc.personality).map((trait, index) => (
                       <span
                         key={index}
                         className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium fantasy-text"
                       >
-                        {trait}
+                        {formatTextField(trait)}
                       </span>
                     ))}
                   </div>
-                    </div>
-                    <div>
+                </div>
+                <div>
                   <h4 className="fantasy-title text-lg font-semibold mb-3">Appearance</h4>
                   <div className="flex flex-wrap gap-2">
-                    {toArray(npc.appearance).map((trait, index) => (
+                    {formatArrayField(npc.appearance).map((trait, index) => (
                       <span
                         key={index}
                         className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium fantasy-text"
                       >
-                        {trait}
+                        {formatTextField(trait)}
                       </span>
-                        ))}
-                      </div>
-                    </div>
+                    ))}
                   </div>
+                </div>
+              </div>
 
               {/* Background */}
               <div>

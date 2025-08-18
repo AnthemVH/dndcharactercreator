@@ -52,58 +52,32 @@ export async function saveImageToDatabase(
     // 3. Implement image optimization and compression
     // 4. Add image metadata and EXIF data handling
     
-    const { prisma } = await import('@/lib/prisma')
+    const { supabaseAdmin } = await import('@/lib/supabase')
     
-    const expiresAt = isAutoSave ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : null // 30 days for auto-save
-    
+    const updateDataFor = (table: string, update: Record<string, any>) =>
+      supabaseAdmin.from(table).update(update).eq('id', contentId)
+
     switch (contentType) {
       case 'character':
-        await prisma.character.update({
-          where: { id: contentId },
-          data: { 
-            portrait: imageData,
-            portraitUrl: imageData // Update both fields for consistency
-          }
-        })
+        await updateDataFor('characters', { portrait_url: imageData })
         break
       case 'npc':
-        await prisma.nPC.update({
-          where: { id: contentId },
-          data: { 
-            portrait: imageData,
-            portraitUrl: imageData // Update both fields for consistency
-          }
-        })
+        await updateDataFor('npcs', { portrait_url: imageData })
         break
       case 'item':
-        await prisma.item.update({
-          where: { id: contentId },
-          data: { portrait: imageData }
-        })
+        await updateDataFor('items', { data: { portrait: imageData } })
         break
       case 'world':
-        await prisma.world.update({
-          where: { id: contentId },
-          data: { portrait: imageData }
-        })
+        await updateDataFor('worlds', { data: { portrait: imageData } })
         break
       case 'quest':
-        await prisma.quest.update({
-          where: { id: contentId },
-          data: { portrait: imageData }
-        })
+        await updateDataFor('quests', { data: { portrait: imageData } })
         break
       case 'encounter':
-        await prisma.encounter.update({
-          where: { id: contentId },
-          data: { portrait: imageData }
-        })
+        await updateDataFor('encounters', { data: { portrait: imageData } })
         break
       case 'campaign':
-        await prisma.campaign.update({
-          where: { id: contentId },
-          data: { portrait: imageData }
-        })
+        await updateDataFor('campaigns', { data: { portrait: imageData } })
         break
       default:
         throw new Error(`Unknown content type: ${contentType}`)

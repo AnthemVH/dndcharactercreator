@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 import puppeteer from 'puppeteer'
 
 export async function GET(
@@ -22,13 +22,13 @@ export async function GET(
     const userId = payload.userId
     const { id: worldId } = await params
 
-    // Get the world
-    const world = await prisma.world.findFirst({
-      where: {
-        id: worldId,
-        userId: userId
-      }
-    })
+    const { data: world, error } = await supabaseAdmin
+      .from('worlds')
+      .select('*')
+      .eq('id', worldId)
+      .eq('user_id', userId)
+      .single()
+    if (error && error.code !== 'PGRST116') throw error
 
     if (!world) {
       return NextResponse.json({ error: 'World not found' }, { status: 404 })
@@ -41,23 +41,25 @@ export async function GET(
     })
 
     const page = await browser.newPage()
+
+    // Merge Supabase row with JSON data and normalize portrait
+    const mergedWorld: any = {
+      ...(world as any)?.data,
+      ...(world as any),
+      portrait: (world as any)?.portrait_url || (world as any)?.data?.portrait || (world as any)?.data?.portrait_url,
+    }
+
+    // Generate HTML content (no watermark)
+    const htmlContent = generateWorldLoreHTML(mergedWorld as any, false)
     
-    // Generate HTML content
-    const htmlContent = generateWorldLoreHTML(world as WorldForPDF, true)
-    
-    await page.setContent(htmlContent)
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' })
     await page.setViewport({ width: 1200, height: 1600 })
 
-    // Generate PDF
+    // Generate PDF (Letter)
     const pdfBuffer = await page.pdf({
-      format: 'A4',
+      format: 'Letter',
       printBackground: true,
-      margin: {
-        top: '0.5in',
-        right: '0.5in',
-        bottom: '0.5in',
-        left: '0.5in'
-      }
+      margin: { top: '0.35in', right: '0.35in', bottom: '0.35in', left: '0.35in' }
     })
 
     await browser.close()
@@ -101,9 +103,8 @@ interface WorldForPDF {
   portrait?: string
 }
 
-function generateWorldLoreHTML(world: WorldForPDF, isFreeTier: boolean = true) {
-  const watermark = isFreeTier ? '<div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 48px; color: rgba(0,0,0,0.1); z-index: 1000; pointer-events: none;">FREE TIER</div>' : ''
-  
+function generateWorldLoreHTML(world: WorldForPDF, isFreeTier: boolean = false) {
+  const watermark = isFreeTier ? '' : ''
   return `
     <!DOCTYPE html>
     <html>
@@ -111,142 +112,57 @@ function generateWorldLoreHTML(world: WorldForPDF, isFreeTier: boolean = true) {
       <meta charset="UTF-8">
       <title>${world.name} - World Lore</title>
       <style>
-        body {
-          font-family: 'Times New Roman', serif;
-          margin: 0;
-          padding: 20px;
-          background: #f5f5f5;
-          color: #333;
-        }
-        .page-container {
-          max-width: 800px;
-          margin: 0 auto;
-          background: white;
-          padding: 30px;
-          box-shadow: 0 0 20px rgba(0,0,0,0.1);
-          position: relative;
-        }
-        .header {
-          text-align: center;
-          border-bottom: 3px solid #8B4513;
-          padding-bottom: 20px;
-          margin-bottom: 30px;
-        }
-        .header h1 {
-          color: #8B4513;
-          font-size: 2.5em;
-          margin: 0;
-          text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-        }
-        .world-info {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
-          margin-bottom: 30px;
-        }
-        .info-group {
-          background: #f9f9f9;
-          padding: 15px;
-          border-radius: 8px;
-          border-left: 4px solid #8B4513;
-        }
-        .info-group h3 {
-          color: #8B4513;
-          margin: 0 0 10px 0;
-          font-size: 1.2em;
-        }
-        .section {
-          margin: 25px 0;
-          padding: 20px;
-          background: #f9f9f9;
-          border-radius: 8px;
-          border-left: 4px solid #8B4513;
-        }
-        .section h3 {
-          color: #8B4513;
-          margin: 0 0 15px 0;
-          font-size: 1.3em;
-        }
-        .portrait {
-          text-align: center;
-          margin: 20px 0;
-        }
-        .portrait img {
-          max-width: 200px;
-          max-height: 200px;
-          border-radius: 10px;
-          box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-        @media print {
-          body { background: white; }
-          .page-container { box-shadow: none; }
-        }
+        :root{--ink:#2b2b2b;--accent:#7a3e2e;--border:#caa56a;--parchment:#f7f1df;--panel:#fffaf0}
+        *{box-sizing:border-box}
+        body{font-family:Georgia,'Times New Roman',serif;color:var(--ink);margin:0;background:radial-gradient(1200px 600px at 50% -10%,#fff7e6,var(--parchment)),linear-gradient(180deg,rgba(0,0,0,.03),rgba(0,0,0,0) 120px);padding:12px}
+        .page{width:8.5in;max-width:8.5in;margin:0 auto;background:var(--panel);border:1px solid var(--border);box-shadow:0 6px 14px rgba(0,0,0,.12);position:relative;padding:18px 22px}
+        .page:before{content:'';position:absolute;inset:6px;border:2px solid rgba(122,62,46,.35);pointer-events:none}
+        .header{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px double var(--accent);padding-bottom:10px;margin-bottom:14px}
+        .title{font-variant:small-caps;letter-spacing:.5px;color:var(--accent);font-size:28px;margin:0;text-shadow:0 1px 0 rgba(0,0,0,.06)}
+        .panel{background:#fffdf6;border:1.5px solid var(--border);border-radius:8px;padding:12px 14px}
+        .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .label{color:#6b5a4f}.value{font-weight:700;color:#3a2f2a}
+        .portrait{text-align:center;margin:8px 0}
+        .portrait img{max-width:180px;max-height:180px;border-radius:6px;border:1px solid var(--border);box-shadow:0 3px 8px rgba(0,0,0,.15)}
+        .section{margin-top:12px}
+        /* Pagination-friendly rules */
+        .panel,.section,.grid2,.header{break-inside: avoid; page-break-inside: avoid}
+        @media print{body{background:white;-webkit-print-color-adjust:exact} .page{box-shadow:none;border:none}}
       </style>
     </head>
     <body>
       ${watermark}
-      <div class="page-container">
+      <div class="page">
         <div class="header">
-          <h1>${world.name}</h1>
-          <p>${world.theme} • ${world.landName}</p>
-        </div>
-
-        ${world.portrait ? `
-        <div class="portrait">
-          <img src="${world.portrait}" alt="World Portrait" />
-        </div>
-        ` : ''}
-
-        <div class="world-info">
-          <div class="info-group">
-            <h3>Basic Information</h3>
-            <p><strong>Theme:</strong> ${world.theme}</p>
-            <p><strong>Land Name:</strong> ${world.landName}</p>
-          </div>
-          <div class="info-group">
-            <h3>Physical Characteristics</h3>
-            <p><strong>Geography:</strong> ${world.geography}</p>
-            <p><strong>Climate:</strong> ${world.climate}</p>
+          <div>
+            <h1 class="title">${world.name}</h1>
+            <div>${world.theme} • ${world.landName}</div>
           </div>
         </div>
 
-        <div class="section">
-          <h3>Description</h3>
-          <p>${world.description}</p>
+        ${world.portrait ? `<div class="portrait"><img src="${world.portrait}" alt="Portrait"/></div>` : ''}
+
+        <div class="panel grid2">
+          <div>
+            <h3>Basics</h3>
+            <div><span class="label">Theme:</span> <span class="value">${world.theme}</span></div>
+            <div><span class="label">Land Name:</span> <span class="value">${world.landName}</span></div>
+            <div><span class="label">Geography:</span> <span class="value">${world.geography || '-'}</span></div>
+            <div><span class="label">Climate:</span> <span class="value">${world.climate || '-'}</span></div>
+          </div>
+          <div>
+            <h3>Description</h3>
+            <div class="value">${world.description || '-'}</div>
+          </div>
         </div>
 
-        <div class="section">
-          <h3>History</h3>
-          <p>${world.history}</p>
-        </div>
-
-        <div class="section">
-          <h3>Culture & Society</h3>
-          <p><strong>Culture:</strong> ${world.culture}</p>
-          <p><strong>Government:</strong> ${world.government}</p>
-          <p><strong>Religion:</strong> ${world.religion}</p>
-          <p><strong>Economy:</strong> ${world.economy}</p>
-        </div>
-
-        <div class="section">
-          <h3>Notable Elements</h3>
-          <p><strong>Major Factions:</strong> ${world.majorFactions}</p>
-          <p><strong>Landmarks:</strong> ${world.landmarks}</p>
-          <p><strong>Resources:</strong> ${world.resources}</p>
-        </div>
-
-        <div class="section">
-          <h3>Conflicts & Events</h3>
-          <p><strong>Conflicts:</strong> ${world.conflicts}</p>
-          <p><strong>Notable Events:</strong> ${world.notableEvents}</p>
-        </div>
-
-        <div class="section">
-          <h3>Legends</h3>
-          <p>${world.legends}</p>
-        </div>
+        <div class="panel section"><h3>History</h3><div class="value">${world.history || '-'}</div></div>
+        <div class="panel section"><h3>Culture & Society</h3><div class="value"><strong>Culture:</strong> ${world.culture || '-'}<br/><strong>Government:</strong> ${world.government || '-'}<br/><strong>Religion:</strong> ${world.religion || '-'}<br/><strong>Economy:</strong> ${world.economy || '-'}</div></div>
+        <div class="panel section"><h3>Notable Elements</h3><div class="value"><strong>Major Factions:</strong> ${world.majorFactions || '-'}<br/><strong>Landmarks:</strong> ${world.landmarks || '-'}<br/><strong>Resources:</strong> ${world.resources || '-'}</div></div>
+        <div class="panel section"><h3>Conflicts & Events</h3><div class="value"><strong>Conflicts:</strong> ${world.conflicts || '-'}<br/><strong>Notable Events:</strong> ${world.notableEvents || '-'}</div></div>
+        <div class="panel section"><h3>Legends</h3><div class="value">${world.legends || '-'}</div></div>
       </div>
     </body>
     </html>
   `
-} 
+}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { hashPassword, generateToken } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 import { cookies } from 'next/headers'
 
 // Force Node.js runtime for Prisma compatibility
@@ -18,9 +18,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    })
+    const { data: existingUser } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle()
 
     if (existingUser) {
       return NextResponse.json(
@@ -32,14 +34,18 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await hashPassword(password)
 
-    // Create user
-    const user = await prisma.user.create({
-      data: {
+    // Create user (id should match Supabase Auth UID if using client-side auth later)
+    const { data: user, error } = await supabaseAdmin
+      .from('users')
+      .insert({
+        id: crypto.randomUUID(),
         name,
         email,
         password: hashedPassword,
-      },
-    })
+      })
+      .select('*')
+      .single()
+    if (error) throw error
 
     const token = await generateToken({
       userId: user.id,
@@ -57,11 +63,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       message: 'Registration successful',
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      },
+      user: { id: user.id, email: user.email, name: user.name },
     })
   } catch (error) {
     console.error('Registration error:', error)

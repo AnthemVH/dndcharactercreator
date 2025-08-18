@@ -9,7 +9,8 @@ import { generatorStateManager } from '@/lib/generator-state'
 import { useUnitSystem, convertDistance } from '@/components/UnitToggle'
 import FantasyToggle from '@/components/FantasyToggle'
 import GenerationStatusPanel from '@/components/GenerationStatusPanel'
-import { showSuccess, showError } from '@/components/FantasyNotification'
+import FantasyNotification, { useNotifications } from '@/components/FantasyNotification'
+import { formatArrayField, formatTextField, getListClasses, getSectionTitle } from '@/lib/content-formatter'
 
 interface CharacterForm {
   name?: string
@@ -22,6 +23,7 @@ interface CharacterForm {
 }
 
 interface GeneratedCharacter {
+  id?: string
   name: string
   race: string
   class: string
@@ -31,7 +33,6 @@ interface GeneratedCharacter {
   stats: {
     STR: number
     DEX: number
-    CON: number
     INT: number
     WIS: number
     CHA: number
@@ -93,6 +94,9 @@ export default function CharacterGenerator() {
   })
   const [isUpdatingFromState, setIsUpdatingFromState] = useState(false)
   const [isPortraitLoading, setIsPortraitLoading] = useState(false)
+  
+  // Notification system
+  const { notifications, removeNotification, showSuccess, showError } = useNotifications()
 
   // Load state from global state manager on component mount
   useEffect(() => {
@@ -368,8 +372,15 @@ export default function CharacterGenerator() {
 
       const data = await response.json()
       
-      // Set character data immediately
-      setCharacter(data.character)
+      // Set character data immediately with the saved ID
+      const characterWithId = {
+        ...data.character,
+        id: data.savedId // Use the ID returned from the API
+      }
+      setCharacter(characterWithId)
+      
+      // Show autosave notification
+      showSuccess('Character generated and autosaved!')
       
       // Update status to complete for character generation
       setGenerationStatus({
@@ -385,7 +396,7 @@ export default function CharacterGenerator() {
       // If portrait is pending, generate it separately
       if (data.portraitPending && !form.skipPortrait) {
         console.log('Starting portrait generation for character:', data.character.name)
-        generatePortrait(data.character)
+        generatePortrait(characterWithId)
       } else {
         console.log('Portrait generation skipped:', {
           portraitPending: data.portraitPending,
@@ -443,10 +454,15 @@ export default function CharacterGenerator() {
       
       // Update character with portrait and stable URL
       if (data.portrait) {
+        const absolutePortraitUrl =
+          typeof window !== 'undefined' && typeof data.portrait === 'string'
+            ? (data.portrait.startsWith('http') ? data.portrait : `${window.location.origin}${data.portrait}`)
+            : data.portrait
+
         const updatedCharacter = {
           ...characterData,
-          portrait: data.portrait,
-          portraitUrl: data.portrait // Store the stable URL
+          portrait: absolutePortraitUrl,
+          portraitUrl: absolutePortraitUrl
         }
         
         console.log('Updating character with portrait data:', {
@@ -585,17 +601,29 @@ export default function CharacterGenerator() {
       }
 
       const result = await response.json()
-      showSuccess('Character Saved!', 'Your character has been saved successfully.')
+      
+      // Update the character with the returned ID if it's a new save
+      if (result.id && !character.id) {
+        setCharacter(prev => prev ? { ...prev, id: result.id } : null)
+      }
+      
+      // Show success notification based on whether it was updated or newly saved
+      if (result.isNew) {
+        showSuccess('Character saved successfully!')
+      } else {
+        showSuccess('Character updated successfully!')
+      }
     } catch (error) {
       console.error('Character saving error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to save character. Please try again.'
       setError(errorMessage)
-      showError('Save Failed', errorMessage)
+      showError(errorMessage)
     }
   }
 
   return (
     <div className="min-h-screen fantasy-main">
+      <FantasyNotification notifications={notifications} onDismiss={removeNotification} />
       <GenerationStatusPanel />
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
@@ -930,12 +958,12 @@ export default function CharacterGenerator() {
               <div>
                 <h4 className="fantasy-title text-lg font-semibold mb-3">Personality Traits</h4>
                 <div className="flex flex-wrap gap-2">
-                  {character.personalityTraits.map((trait, index) => (
+                  {formatArrayField(character.personalityTraits).map((trait, index) => (
                     <span
                       key={index}
                       className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium fantasy-text"
                     >
-                      {trait}
+                      {formatTextField(trait)}
                     </span>
                   ))}
                 </div>
@@ -943,7 +971,7 @@ export default function CharacterGenerator() {
 
               {/* Quote */}
               <div className="fantasy-card p-4 border-l-4 border-yellow-500">
-                                  <p className="fantasy-text italic text-base">&quot;{character.quote}&quot;</p>
+                <p className="fantasy-text italic text-base">&quot;{formatTextField(character.quote)}&quot;</p>
                 <p className="fantasy-text text-sm text-gray-400 mt-2">— {character.name}</p>
               </div>
 
@@ -953,7 +981,7 @@ export default function CharacterGenerator() {
                   <Crown className="h-4 w-4 mr-2 text-purple-600" />
                   Unique Trait
                 </h4>
-                <p className="fantasy-text text-base">{character.uniqueTrait}</p>
+                <p className="fantasy-text text-base">{formatTextField(character.uniqueTrait)}</p>
               </div>
 
               {/* Proficiencies & Features */}
@@ -961,16 +989,16 @@ export default function CharacterGenerator() {
                 <div>
                   <h4 className="fantasy-title text-lg font-semibold mb-3">Proficiencies</h4>
                   <div className="fantasy-card p-4 space-y-1">
-                    {character.proficiencies.map((prof, index) => (
-                      <div key={index} className="fantasy-text text-sm">• {prof}</div>
+                    {formatArrayField(character.proficiencies).map((prof, index) => (
+                      <div key={index} className="fantasy-text text-sm">• {formatTextField(prof)}</div>
                     ))}
                   </div>
                 </div>
                 <div>
                   <h4 className="fantasy-title text-lg font-semibold mb-3">Features</h4>
                   <div className="fantasy-card p-4 space-y-1">
-                    {character.features.map((feature, index) => (
-                      <div key={index} className="fantasy-text text-sm">• {feature}</div>
+                    {formatArrayField(character.features).map((feature, index) => (
+                      <div key={index} className="fantasy-text text-sm">• {formatTextField(feature)}</div>
                     ))}
                   </div>
                 </div>

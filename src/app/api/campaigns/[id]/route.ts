@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function DELETE(
   request: NextRequest,
@@ -21,13 +21,12 @@ export async function DELETE(
     const userId = payload.userId
     const { id: campaignId } = await params
 
-    // Delete the campaign
-    await prisma.campaign.delete({
-      where: {
-        id: campaignId,
-        userId: userId // Ensure user owns the campaign
-      }
-    })
+    const { error } = await supabaseAdmin
+      .from('campaigns')
+      .delete()
+      .eq('id', campaignId)
+      .eq('user_id', userId)
+    if (error) throw error
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -56,18 +55,19 @@ export async function PUT(
     const { id: campaignId } = await params
     const body = await request.json()
 
-    // Update the campaign
-    const updatedCampaign = await prisma.campaign.update({
-      where: {
-        id: campaignId,
-        userId: userId // Ensure user owns the campaign
-      },
-      data: {
+    const { data: updatedCampaign, error } = await supabaseAdmin
+      .from('campaigns')
+      .update({
         name: body.name,
-        theme: body.theme,
-        description: body.description
-      }
-    })
+        description: body.description ?? null,
+        data: body,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', campaignId)
+      .eq('user_id', userId)
+      .select('*')
+      .single()
+    if (error) throw error
 
     return NextResponse.json(updatedCampaign)
   } catch (error) {
@@ -95,19 +95,24 @@ export async function GET(
     const userId = payload.userId
     const { id: campaignId } = await params
 
-    // Get the campaign
-    const campaign = await prisma.campaign.findFirst({
-      where: {
-        id: campaignId,
-        userId: userId
-      }
-    })
+    const { data: campaign, error } = await supabaseAdmin
+      .from('campaigns')
+      .select('*')
+      .eq('id', campaignId)
+      .eq('user_id', userId)
+      .single()
+    if (error && error.code !== 'PGRST116') throw error
 
     if (!campaign) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
     }
 
-    return NextResponse.json(campaign)
+    const merged = {
+      ...(campaign as any).data,
+      ...(campaign as any),
+      portrait: (campaign as any).portrait_url || (campaign as any).data?.portrait || (campaign as any).data?.portrait_url,
+    }
+    return NextResponse.json(merged)
   } catch (error) {
     console.error('Campaign fetch error:', error)
     return NextResponse.json({ error: 'Failed to fetch campaign' }, { status: 500 })

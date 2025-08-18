@@ -5,15 +5,19 @@ interface QueueItem<T = unknown> {
   resolve: (value: T) => void
   reject: (error: unknown) => void
   timestamp: Date
+  retryCount: number
+  priority: number // Higher number = higher priority
 }
 
 class OpenRouterQueue {
   private queue: QueueItem[] = []
   private processing = false
-  private concurrencyLimit = 3 // Increased from 1 to 3
+  private concurrencyLimit = 5 // Increased from 3 to 5 for better performance
   private activeRequests = 0
+  private maxRetries = 3
+  private retryDelay = 1000 // Base delay in ms for retries
 
-  async add<T>(execute: () => Promise<T>, userId: string): Promise<T> {
+  async add<T>(execute: () => Promise<T>, userId: string, priority: number = 0): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const item: QueueItem<T> = {
         id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
@@ -21,10 +25,19 @@ class OpenRouterQueue {
         execute,
         resolve,
         reject,
-        timestamp: new Date()
+        timestamp: new Date(),
+        retryCount: 0,
+        priority
       }
 
-      this.queue.push(item as QueueItem)
+      // Insert item based on priority (higher priority first)
+      const insertIndex = this.queue.findIndex(queueItem => queueItem.priority < priority)
+      if (insertIndex === -1) {
+        this.queue.push(item as QueueItem)
+      } else {
+        this.queue.splice(insertIndex, 0, item as QueueItem)
+      }
+      
       this.process()
     })
   }
@@ -41,7 +54,10 @@ class OpenRouterQueue {
       if (!item) continue
 
       this.activeRequests++
-      this.processItem(item)
+      // Don't await - process in parallel
+      this.processItem(item).catch(() => {
+        // Error already handled in processItem
+      })
     }
 
     this.processing = false
@@ -52,10 +68,26 @@ class OpenRouterQueue {
       const result = await item.execute()
       item.resolve(result)
     } catch (error) {
-      // Check if it's a rate limit error (429)
-      if (error instanceof Error && error.message.includes('429')) {
-        // Put the item back at the front of the queue for retry
-        this.queue.unshift(item)
+      // Check if it's a rate limit error (429) or server error (5xx)
+      if (error instanceof Error && (
+        error.message.includes('429') || 
+        error.message.includes('503') ||
+        error.message.includes('502') ||
+        error.message.includes('500')
+      )) {
+        // Retry with exponential backoff if we haven't exceeded max retries
+        if (item.retryCount < this.maxRetries) {
+          item.retryCount++
+          const delay = this.retryDelay * Math.pow(2, item.retryCount - 1) // Exponential backoff
+          
+          setTimeout(() => {
+            // Put the item back at the front of the queue for retry
+            this.queue.unshift(item)
+            this.process()
+          }, delay)
+        } else {
+          item.reject(new Error(`Max retries exceeded: ${error.message}`))
+        }
       } else {
         item.reject(error)
       }
@@ -64,7 +96,7 @@ class OpenRouterQueue {
       
       // Continue processing if there are more items and we have capacity
       if (this.queue.length > 0 && this.activeRequests < this.concurrencyLimit) {
-        this.process()
+        setTimeout(() => this.process(), 100) // Small delay to prevent overwhelming
       }
     }
   }

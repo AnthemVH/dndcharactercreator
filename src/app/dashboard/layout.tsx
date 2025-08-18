@@ -83,21 +83,17 @@ export default function DashboardLayout({
         setUserRole(user.role || 'user')
       } else {
         console.error('❌ Failed to get user role:', response.status)
-        // Fallback: try to get role from token
-        const token = document.cookie.split('; ').find(row => row.startsWith('token='))
-        if (token) {
-          console.log('🔑 Token found, setting role to admin temporarily')
-          setUserRole('admin')
+        if (response.status === 401) {
+          // Token invalid/expired → force re-auth
+          try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }) } catch {}
+          window.location.href = '/login'
+          return
         }
+        setUserRole('user')
       }
     } catch (error) {
       console.error('💥 Error getting user role:', error)
-      // Fallback: try to get role from token
-      const token = document.cookie.split('; ').find(row => row.startsWith('token='))
-      if (token) {
-        console.log('🔑 Token found, setting role to admin temporarily')
-        setUserRole('admin')
-      }
+      setUserRole('user')
     }
   }
 

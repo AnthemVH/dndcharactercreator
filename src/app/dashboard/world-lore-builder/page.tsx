@@ -7,6 +7,8 @@ import { clearLocalStorageState, saveToLocalStorage, loadFromLocalStorage } from
 import { generatorStateManager } from '@/lib/generator-state'
 import FantasyToggle from '@/components/FantasyToggle'
 import GenerationStatusPanel from '@/components/GenerationStatusPanel'
+import FantasyNotification, { useNotifications } from '@/components/FantasyNotification'
+import { formatArrayField, formatTextField, getListClasses, getSectionTitle } from '@/lib/content-formatter'
 
 interface WorldLoreForm {
   name?: string
@@ -16,9 +18,14 @@ interface WorldLoreForm {
 }
 
 interface GeneratedWorldLore {
+  id?: string // Added for autosave
   name: string
   type: string
   theme: string
+  landName?: string
+  climate?: string
+  population?: string
+  government?: string
   description: string
   history: string
   culture: string[]
@@ -29,6 +36,10 @@ interface GeneratedWorldLore {
   economy: string[]
   conflicts: string[]
   legends: string[]
+  notableEvents?: string[]
+  majorFactions?: string[]
+  landmarks?: string[]
+  resources?: string[]
   quote: string
   uniqueTrait: string
 }
@@ -65,6 +76,9 @@ export default function WorldLoreBuilder() {
     stage: 'complete'
   })
   const [isUpdatingFromState, setIsUpdatingFromState] = useState(false)
+  
+  // Notification system
+  const { notifications, removeNotification, showSuccess, showError } = useNotifications()
 
   // Load state from global state manager on component mount
   useEffect(() => {
@@ -352,9 +366,14 @@ export default function WorldLoreBuilder() {
       const ensureArray = (value: unknown): string[] => Array.isArray(value) ? value : (value ? [String(value)] : [])
 
       const normalizedWorld: GeneratedWorldLore = {
+        id: data.savedId, // Add the saved ID from the API
         name: world?.name || 'Unknown World',
         type: world?.type || form.type || '',
         theme: world?.theme || form.theme || 'Fantasy',
+        landName: world?.landName || '',
+        climate: world?.climate || '',
+        population: world?.population || '',
+        government: world?.government || '',
         description: world?.description || '',
         history: world?.history || '',
         culture: ensureArray(world?.culture),
@@ -365,11 +384,19 @@ export default function WorldLoreBuilder() {
         economy: ensureArray(world?.economy),
         conflicts: ensureArray(world?.conflicts),
         legends: ensureArray(world?.legends),
+        notableEvents: ensureArray(world?.notableEvents),
+        majorFactions: ensureArray(world?.majorFactions),
+        landmarks: ensureArray(world?.landmarks),
+        resources: ensureArray(world?.resources),
         quote: world?.quote || '',
         uniqueTrait: world?.uniqueTrait || world?.uniqueFeature || '',
       }
 
       setWorldLore(normalizedWorld)
+      
+      // Show autosave notification
+      showSuccess('World lore generated and autosaved!')
+      
       generatorStateManager.updateState(GENERATOR_TYPE, {
         result: normalizedWorld,
         isGenerating: false,
@@ -445,9 +472,7 @@ export default function WorldLoreBuilder() {
     }
 
     try {
-      const worldLoreToSave = {
-        ...worldLore
-      }
+      const worldLoreToSave = { ...worldLore }
       
       console.log('Saving world lore:', {
         name: worldLoreToSave.name,
@@ -463,7 +488,8 @@ export default function WorldLoreBuilder() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ worldLore: worldLoreToSave }),
+        credentials: 'include',
+        body: JSON.stringify({ world: worldLoreToSave }),
       })
 
       if (!response.ok) {
@@ -472,17 +498,29 @@ export default function WorldLoreBuilder() {
       }
 
       const result = await response.json()
-      alert('World lore saved successfully!')
+      
+      // Update the world lore with the returned ID if it's a new save
+      if (result.id && !worldLore.id) {
+        setWorldLore(prev => prev ? { ...prev, id: result.id } : null)
+      }
+      
+      // Show success notification based on whether it was updated or newly saved
+      if (result.isNew) {
+        showSuccess('World lore saved successfully!')
+      } else {
+        showSuccess('World lore updated successfully!')
+      }
     } catch (error) {
       console.error('World lore saving error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to save world lore. Please try again.'
       setError(errorMessage)
-      alert(`Error saving world lore: ${errorMessage}`)
+      showError(errorMessage)
     }
   }
 
   return (
     <div className="min-h-screen fantasy-main">
+      <FantasyNotification notifications={notifications} onDismiss={removeNotification} />
       <GenerationStatusPanel />
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
@@ -698,6 +736,24 @@ export default function WorldLoreBuilder() {
                 </div>
               </div>
 
+              {/* Land, Climate, Population, Government */}
+              {(worldLore.landName || worldLore.climate || worldLore.population || worldLore.government) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {worldLore.landName && (
+                    <div className="fantasy-card p-4"><div className="fantasy-text text-sm"><span className="font-semibold">Land:</span> {worldLore.landName}</div></div>
+                  )}
+                  {worldLore.climate && (
+                    <div className="fantasy-card p-4"><div className="fantasy-text text-sm"><span className="font-semibold">Climate:</span> {worldLore.climate}</div></div>
+                  )}
+                  {worldLore.population && (
+                    <div className="fantasy-card p-4"><div className="fantasy-text text-sm"><span className="font-semibold">Population:</span> {worldLore.population}</div></div>
+                  )}
+                  {worldLore.government && (
+                    <div className="fantasy-card p-4"><div className="fantasy-text text-sm"><span className="font-semibold">Government:</span> {worldLore.government}</div></div>
+                  )}
+                </div>
+              )}
+
               {/* Politics & Religion */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -718,6 +774,32 @@ export default function WorldLoreBuilder() {
                 </div>
               </div>
 
+              {/* Notable Events & Factions */}
+              {(worldLore.notableEvents?.length || worldLore.majorFactions?.length) ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {worldLore.notableEvents && (
+                    <div>
+                      <h4 className="fantasy-title text-lg font-semibold mb-3">Notable Events</h4>
+                      <div className="fantasy-card p-4 space-y-1">
+                        {worldLore.notableEvents.map((ev, idx) => (
+                          <div key={idx} className="fantasy-text text-sm">• {ev}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {worldLore.majorFactions && (
+                    <div>
+                      <h4 className="fantasy-title text-lg font-semibold mb-3">Major Factions</h4>
+                      <div className="fantasy-card p-4 space-y-1">
+                        {worldLore.majorFactions.map((f, idx) => (
+                          <div key={idx} className="fantasy-text text-sm">• {f}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
               {/* Magic & Economy */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -737,6 +819,32 @@ export default function WorldLoreBuilder() {
                   </div>
                 </div>
               </div>
+
+              {/* Landmarks & Resources */}
+              {(worldLore.landmarks?.length || worldLore.resources?.length) ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {worldLore.landmarks && (
+                    <div>
+                      <h4 className="fantasy-title text-lg font-semibold mb-3">Landmarks</h4>
+                      <div className="fantasy-card p-4 space-y-1">
+                        {worldLore.landmarks.map((lm, idx) => (
+                          <div key={idx} className="fantasy-text text-sm">• {lm}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {worldLore.resources && (
+                    <div>
+                      <h4 className="fantasy-title text-lg font-semibold mb-3">Resources</h4>
+                      <div className="fantasy-card p-4 space-y-1">
+                        {worldLore.resources.map((r, idx) => (
+                          <div key={idx} className="fantasy-text text-sm">• {r}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
 
               {/* Conflicts & Legends */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

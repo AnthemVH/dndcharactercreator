@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 
 // Force Node.js runtime for Prisma compatibility
 export const runtime = 'nodejs'
@@ -18,10 +18,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
     }
 
-    const items = await prisma.item.findMany({
-      where: { userId: payload.userId },
-      orderBy: { createdAt: 'desc' }
-    })
+    const { data, error } = await supabaseAdmin
+      .from('items')
+      .select('*')
+      .eq('user_id', payload.userId)
+      .order('created_at', { ascending: false })
+    if (error) {
+      console.error('Supabase error (items):', error)
+      return NextResponse.json({ error: 'Failed to load items' }, { status: 500 })
+    }
+    const items = data || []
 
     return NextResponse.json({ items })
   } catch (error) {

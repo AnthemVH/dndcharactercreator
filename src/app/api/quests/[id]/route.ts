@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function DELETE(
   request: NextRequest,
@@ -21,13 +21,12 @@ export async function DELETE(
     const userId = payload.userId
     const { id: questId } = await params
 
-    // Delete the quest
-    await prisma.quest.delete({
-      where: {
-        id: questId,
-        userId: userId // Ensure user owns the quest
-      }
-    })
+    const { error } = await supabaseAdmin
+      .from('quests')
+      .delete()
+      .eq('id', questId)
+      .eq('user_id', userId)
+    if (error) throw error
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -55,19 +54,24 @@ export async function GET(
     const userId = payload.userId
     const { id: questId } = await params
 
-    // Get the quest
-    const quest = await prisma.quest.findFirst({
-      where: {
-        id: questId,
-        userId: userId
-      }
-    })
+    const { data: quest, error } = await supabaseAdmin
+      .from('quests')
+      .select('*')
+      .eq('id', questId)
+      .eq('user_id', userId)
+      .single()
+    if (error && error.code !== 'PGRST116') throw error
 
     if (!quest) {
       return NextResponse.json({ error: 'Quest not found' }, { status: 404 })
     }
 
-    return NextResponse.json(quest)
+    const merged = {
+      ...(quest as any).data,
+      ...(quest as any),
+      portrait: (quest as any).portrait_url || (quest as any).data?.portrait || (quest as any).data?.portrait_url,
+    }
+    return NextResponse.json(merged)
   } catch (error) {
     console.error('Quest fetch error:', error)
     return NextResponse.json({ error: 'Failed to fetch quest' }, { status: 500 })

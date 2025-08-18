@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 import puppeteer from 'puppeteer'
 
 export async function GET(
@@ -22,13 +22,13 @@ export async function GET(
     const userId = payload.userId
     const { id: itemId } = await params
 
-    // Get the item
-    const item = await prisma.item.findFirst({
-      where: {
-        id: itemId,
-        userId: userId
-      }
-    })
+    const { data: item, error } = await supabaseAdmin
+      .from('items')
+      .select('*')
+      .eq('id', itemId)
+      .eq('user_id', userId)
+      .single()
+    if (error && error.code !== 'PGRST116') throw error
 
     if (!item) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 })
@@ -41,22 +41,29 @@ export async function GET(
     })
 
     const page = await browser.newPage()
+
+    // Merge Supabase row with JSON data and normalize portrait
+    const mergedItem: any = {
+      ...(item as any)?.data,
+      ...(item as any),
+      portrait: (item as any)?.portrait_url || (item as any)?.data?.portrait || (item as any)?.data?.portrait_url,
+    }
+
+    // Generate HTML content (no watermark)
+    const htmlContent = generateItemCardHTML(mergedItem as any, false, 'imperial')
     
-    // Generate HTML content
-    const htmlContent = generateItemCardHTML(item as ItemForPDF, true, 'imperial')
-    
-    await page.setContent(htmlContent)
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' })
     await page.setViewport({ width: 1200, height: 1600 })
 
-    // Generate PDF
+    // Generate PDF (Letter to match character sheet)
     const pdfBuffer = await page.pdf({
-      format: 'A4',
+      format: 'Letter',
       printBackground: true,
       margin: {
-        top: '0.5in',
-        right: '0.5in',
-        bottom: '0.5in',
-        left: '0.5in'
+        top: '0.35in',
+        right: '0.35in',
+        bottom: '0.35in',
+        left: '0.35in'
       }
     })
 
@@ -101,13 +108,12 @@ interface ItemForPDF {
   portrait?: string
 }
 
-function generateItemCardHTML(item: ItemForPDF, isFreeTier: boolean = true, unitSystem: 'metric' | 'imperial' = 'imperial') {
-  const watermark = isFreeTier ? '<div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 48px; color: rgba(0,0,0,0.1); z-index: 1000; pointer-events: none;">FREE TIER</div>' : ''
+function generateItemCardHTML(item: ItemForPDF, isFreeTier: boolean = false, unitSystem: 'metric' | 'imperial' = 'imperial') {
+  const watermark = isFreeTier ? '' : ''
   
-  // Convert weight based on unit system
-  const weightDisplay = unitSystem === 'metric' ? 
-    `${Math.round(parseFloat(item.weight) * 0.453592)} kg` : 
-    `${item.weight} lbs`
+  const weightDisplay = unitSystem === 'metric'
+    ? `${Math.round(parseFloat(String(item.weight || '0')) * 0.453592)} kg`
+    : `${item.weight} lbs`
 
   return `
     <!DOCTYPE html>
@@ -116,167 +122,69 @@ function generateItemCardHTML(item: ItemForPDF, isFreeTier: boolean = true, unit
       <meta charset="UTF-8">
       <title>${item.name} - Item Profile</title>
       <style>
-        body {
-          font-family: 'Times New Roman', serif;
-          margin: 0;
-          padding: 20px;
-          background: #f5f5f5;
-          color: #333;
+        :root{--ink:#2b2b2b;--accent:#7a3e2e;--border:#caa56a;--parchment:#f7f1df;--panel:#fffaf0}
+        *{box-sizing:border-box}
+        body{
+          font-family: Georgia, 'Times New Roman', serif;
+          color:var(--ink);
+          margin:0;
+          background: radial-gradient(1200px 600px at 50% -10%, #fff7e6, var(--parchment))
+                      , linear-gradient(180deg, rgba(0,0,0,0.03), rgba(0,0,0,0) 120px);
+          padding:12px;
         }
-        .page-container {
-          max-width: 800px;
-          margin: 0 auto;
-          background: white;
-          padding: 30px;
-          box-shadow: 0 0 20px rgba(0,0,0,0.1);
-          position: relative;
-        }
-        .header {
-          text-align: center;
-          border-bottom: 3px solid #8B4513;
-          padding-bottom: 20px;
-          margin-bottom: 30px;
-        }
-        .header h1 {
-          color: #8B4513;
-          font-size: 2.5em;
-          margin: 0;
-          text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-        }
-        .item-info {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
-          margin-bottom: 30px;
-        }
-        .info-group {
-          background: #f9f9f9;
-          padding: 15px;
-          border-radius: 8px;
-          border-left: 4px solid #8B4513;
-        }
-        .info-group h3 {
-          color: #8B4513;
-          margin: 0 0 10px 0;
-          font-size: 1.2em;
-        }
-        .section {
-          margin: 25px 0;
-          padding: 20px;
-          background: #f9f9f9;
-          border-radius: 8px;
-          border-left: 4px solid #8B4513;
-        }
-        .section h3 {
-          color: #8B4513;
-          margin: 0 0 15px 0;
-          font-size: 1.3em;
-        }
-        .quote {
-          font-style: italic;
-          font-size: 1.1em;
-          color: #8B4513;
-          text-align: center;
-          margin: 20px 0;
-          padding: 15px;
-          background: #f0f0f0;
-          border-radius: 8px;
-          border-left: 4px solid #8B4513;
-        }
-        .portrait {
-          text-align: center;
-          margin: 20px 0;
-        }
-        .portrait img {
-          max-width: 200px;
-          max-height: 200px;
-          border-radius: 10px;
-          box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-        .rarity-badge {
-          display: inline-block;
-          padding: 5px 15px;
-          border-radius: 20px;
-          font-weight: bold;
-          color: white;
-          margin: 10px 0;
-        }
-        .rarity-common { background: #6c757d; }
-        .rarity-uncommon { background: #28a745; }
-        .rarity-rare { background: #007bff; }
-        .rarity-very-rare { background: #6f42c1; }
-        .rarity-legendary { background: #fd7e14; }
-        .rarity-artifact { background: #dc3545; }
-        @media print {
-          body { background: white; }
-          .page-container { box-shadow: none; }
-        }
+        .page{width:8.5in;max-width:8.5in;margin:0 auto;background:var(--panel);border:1px solid var(--border);box-shadow:0 6px 14px rgba(0,0,0,.12);position:relative;padding:18px 22px}
+        .page:before{content:'';position:absolute;inset:6px;border:2px solid rgba(122,62,46,.35);pointer-events:none}
+        .header{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:3px double var(--accent);padding-bottom:10px;margin-bottom:14px}
+        .title{font-variant:small-caps;letter-spacing:.5px;color:var(--accent);font-size:28px;margin:0;text-shadow:0 1px 0 rgba(0,0,0,.06)}
+        .panel{background:#fffdf6;border:1.5px solid var(--border);border-radius:8px;padding:12px 14px}
+        .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .label{color:#6b5a4f}
+        .value{font-weight:700;color:#3a2f2a}
+        .portrait{text-align:center;margin:8px 0}
+        .portrait img{max-width:180px;max-height:180px;border-radius:6px;border:1px solid var(--border);box-shadow:0 3px 8px rgba(0,0,0,.15)}
+        .badge{display:inline-block;padding:6px 10px;border-radius:16px;background:#b97a3d;color:#fff;font-weight:700}
+        .section{margin-top:12px}
+      /* Pagination-friendly rules */
+      .panel,.section,.grid2,.header{break-inside: avoid; page-break-inside: avoid}
+      @media print{body{background:white;-webkit-print-color-adjust:exact} .page{box-shadow:none;border:none}}
       </style>
     </head>
     <body>
       ${watermark}
-      <div class="page-container">
+      <div class="page">
         <div class="header">
-          <h1>${item.name}</h1>
-          <p>${item.itemType} • ${item.theme}</p>
-          <div class="rarity-badge rarity-${item.rarity.toLowerCase().replace(' ', '-')}">
-            ${item.rarity}
+          <div>
+            <h1 class="title">${item.name}</h1>
+            <div>${item.itemType} • ${item.theme}</div>
+          </div>
+          <div class="badge">${item.rarity}</div>
+        </div>
+
+        ${item.portrait ? `<div class="portrait"><img src="${item.portrait}" alt="Portrait"/></div>` : ''}
+
+        <div class="panel grid2">
+          <div>
+            <h3>Basics</h3>
+            <div><span class="label">Type:</span> <span class="value">${item.itemType}</span></div>
+            <div><span class="label">Theme:</span> <span class="value">${item.theme}</span></div>
+            <div><span class="label">Value:</span> <span class="value">${item.value}</span></div>
+            <div><span class="label">Weight:</span> <span class="value">${weightDisplay}</span></div>
+            <div><span class="label">Attunement:</span> <span class="value">${item.attunement ? 'Required' : 'Not Required'}</span></div>
+          </div>
+          <div>
+            <h3>Properties</h3>
+            <div class="value">${item.properties || '-'}</div>
+            <div class="label">Magical Effects</div>
+            <div class="value">${item.magicalEffects || '-'}</div>
           </div>
         </div>
 
-        ${item.portrait ? `
-        <div class="portrait">
-          <img src="${item.portrait}" alt="Item Portrait" />
-        </div>
-        ` : ''}
-
-        <div class="item-info">
-          <div class="info-group">
-            <h3>Basic Information</h3>
-            <p><strong>Type:</strong> ${item.itemType}</p>
-            <p><strong>Theme:</strong> ${item.theme}</p>
-            <p><strong>Rarity:</strong> ${item.rarity}</p>
-            <p><strong>Value:</strong> ${item.value}</p>
-            <p><strong>Weight:</strong> ${weightDisplay}</p>
-            <p><strong>Attunement:</strong> ${item.attunement ? 'Required' : 'Not Required'}</p>
-          </div>
-          <div class="info-group">
-            <h3>Properties & Effects</h3>
-            <p><strong>Properties:</strong> ${item.properties}</p>
-            <p><strong>Magical Effects:</strong> ${item.magicalEffects}</p>
-            <p><strong>Requirements:</strong> ${item.requirements}</p>
-            <p><strong>Restrictions:</strong> ${item.restrictions}</p>
-          </div>
-        </div>
-
-        ${item.quote ? `
-        <div class="quote">
-          "${item.quote}"
-        </div>
-        ` : ''}
-
-        <div class="section">
-          <h3>Description</h3>
-          <p>${item.description}</p>
-        </div>
-
-        <div class="section">
-          <h3>History</h3>
-          <p>${item.history}</p>
-        </div>
-
-        <div class="section">
-          <h3>Unique Trait</h3>
-          <p>${item.uniqueTrait}</p>
-        </div>
-
-        <div class="section">
-          <h3>Crafting & Enchantments</h3>
-          <p><strong>Crafting Materials:</strong> ${item.craftingMaterials}</p>
-          <p><strong>Enchantments:</strong> ${item.enchantments}</p>
-        </div>
+        <div class="panel section"><h3>Description</h3><div class="value">${item.description || '-'}</div></div>
+        <div class="panel section"><h3>History</h3><div class="value">${item.history || '-'}</div></div>
+        <div class="panel section"><h3>Unique Trait</h3><div class="value">${item.uniqueTrait || '-'}</div></div>
+        <div class="panel section"><h3>Crafting & Enchantments</h3><div class="value"><strong>Crafting:</strong> ${item.craftingMaterials || '-'}<br/><strong>Enchantments:</strong> ${item.enchantments || '-'}</div></div>
       </div>
     </body>
     </html>
   `
-} 
+}

@@ -1,193 +1,170 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react'
+import { CheckCircle, X, AlertCircle, Info } from 'lucide-react'
 
-export interface NotificationProps {
-  id: string
-  type: 'success' | 'error' | 'info' | 'warning'
-  title: string
+export interface NotificationConfig {
+  id?: string
   message: string
-  duration?: number
-  onClose?: () => void
+  type: 'success' | 'error' | 'info' | 'warning'
+  duration?: number // in milliseconds, default 5000
+  persistent?: boolean // if true, won't auto-hide
 }
 
-interface NotificationState extends NotificationProps {
-  isVisible: boolean
+interface FantasyNotificationProps {
+  notifications?: NotificationConfig[]
+  onDismiss: (id: string) => void
 }
 
-// Create a global notification manager
-class NotificationManager {
-  private listeners: ((notifications: NotificationState[]) => void)[] = []
-  private notifications: NotificationState[] = []
-  private nextId = 1
-
-  subscribe(listener: (notifications: NotificationState[]) => void) {
-    this.listeners.push(listener)
-    listener(this.notifications)
-    return () => {
-      this.listeners = this.listeners.filter(l => l !== listener)
-    }
-  }
-
-  private notify() {
-    this.listeners.forEach(listener => listener(this.notifications))
-  }
-
-  show(notification: Omit<NotificationProps, 'id'>) {
-    const id = `notification-${this.nextId++}`
-    const newNotification: NotificationState = {
-      ...notification,
-      id,
-      isVisible: true,
-      duration: notification.duration ?? 5000
-    }
-
-    this.notifications.push(newNotification)
-    this.notify()
-
-    // Auto-hide after duration
-    if (newNotification.duration && newNotification.duration > 0) {
-      setTimeout(() => {
-        this.hide(id)
-      }, newNotification.duration)
-    }
-  }
-
-  hide(id: string) {
-    const notification = this.notifications.find(n => n.id === id)
-    if (notification) {
-      notification.isVisible = false
-      this.notify()
-
-      // Remove from array after animation
-      setTimeout(() => {
-        this.notifications = this.notifications.filter(n => n.id !== id)
-        this.notify()
-      }, 300)
-    }
-  }
-
-  clear() {
-    this.notifications = []
-    this.notify()
-  }
-}
-
-export const notificationManager = new NotificationManager()
-
-// Hook to use notifications
-export const useNotifications = () => {
-  const [notifications, setNotifications] = useState<NotificationState[]>([])
-
-  useEffect(() => {
-    return notificationManager.subscribe(setNotifications)
-  }, [])
-
-  const showNotification = (notification: Omit<NotificationProps, 'id'>) => {
-    notificationManager.show(notification)
-  }
-
-  const hideNotification = (id: string) => {
-    notificationManager.hide(id)
-  }
-
-  return { notifications, showNotification, hideNotification }
-}
-
-// Individual notification component
-const NotificationItem = ({ notification, onClose }: { notification: NotificationState; onClose: () => void }) => {
-  const getIcon = () => {
-    switch (notification.type) {
+export default function FantasyNotification({ notifications, onDismiss }: FantasyNotificationProps) {
+  const getIcon = (type: NotificationConfig['type']) => {
+    switch (type) {
       case 'success':
         return <CheckCircle className="h-5 w-5 text-green-600" />
       case 'error':
         return <AlertCircle className="h-5 w-5 text-red-600" />
       case 'warning':
-        return <AlertTriangle className="h-5 w-5 text-yellow-600" />
+        return <AlertCircle className="h-5 w-5 text-yellow-600" />
       case 'info':
-        return <Info className="h-5 w-5 text-blue-600" />
       default:
         return <Info className="h-5 w-5 text-blue-600" />
     }
   }
 
-  const getBorderColor = () => {
-    switch (notification.type) {
+  const getStyles = (type: NotificationConfig['type']) => {
+    switch (type) {
       case 'success':
-        return 'border-green-600 bg-green-50/20'
+        return 'bg-green-50 border-green-200 text-green-800'
       case 'error':
-        return 'border-red-600 bg-red-50/20'
+        return 'bg-red-50 border-red-200 text-red-800'
       case 'warning':
-        return 'border-yellow-600 bg-yellow-50/20'
+        return 'bg-yellow-50 border-yellow-200 text-yellow-800'
       case 'info':
-        return 'border-blue-600 bg-blue-50/20'
       default:
-        return 'border-blue-600 bg-blue-50/20'
+        return 'bg-blue-50 border-blue-200 text-blue-800'
     }
   }
 
   return (
-    <div
-      className={`fantasy-card p-4 mb-4 border-2 ${getBorderColor()} transition-all duration-300 transform ${
-        notification.isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
-      }`}
-    >
-      <div className="flex items-start space-x-3">
-        <div className="flex-shrink-0 mt-0.5">
-          {getIcon()}
-        </div>
-        <div className="flex-1 min-w-0">
-          <h4 className="fantasy-title text-sm font-semibold mb-1">
-            {notification.title}
-          </h4>
-          <p className="fantasy-text text-sm">
-            {notification.message}
-          </p>
-        </div>
-        <button
-          onClick={onClose}
-          className="flex-shrink-0 ml-2 p-1 rounded-full hover:bg-gray-200/50 transition-colors"
-        >
-          <X className="h-4 w-4 text-gray-500" />
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// Main notification container
-export default function FantasyNotification() {
-  const { notifications, hideNotification } = useNotifications()
-
-  if (notifications.length === 0) return null
-
-  return (
-    <div className="fixed top-4 right-4 z-50 max-w-sm w-full space-y-2">
-      {notifications.map(notification => (
+    <div className="fixed top-4 right-4 z-50 space-y-2 max-w-md">
+      {(notifications || []).map((notification) => (
         <NotificationItem
           key={notification.id}
           notification={notification}
-          onClose={() => hideNotification(notification.id)}
+          onDismiss={onDismiss}
+          getIcon={getIcon}
+          getStyles={getStyles}
         />
       ))}
     </div>
   )
 }
 
-// Utility functions for easy usage
-export const showSuccess = (title: string, message: string, duration?: number) => {
-  notificationManager.show({ type: 'success', title, message, duration })
+interface NotificationItemProps {
+  notification: NotificationConfig
+  onDismiss: (id: string) => void
+  getIcon: (type: NotificationConfig['type']) => JSX.Element
+  getStyles: (type: NotificationConfig['type']) => string
 }
 
-export const showError = (title: string, message: string, duration?: number) => {
-  notificationManager.show({ type: 'error', title, message, duration })
+function NotificationItem({ notification, onDismiss, getIcon, getStyles }: NotificationItemProps) {
+  const [isVisible, setIsVisible] = useState(false)
+
+  useEffect(() => {
+    // Animate in
+    setIsVisible(true)
+
+    // Auto-dismiss after duration (unless persistent)
+    if (!notification.persistent) {
+      const duration = notification.duration || 5000
+      const timer = setTimeout(() => {
+        handleDismiss()
+      }, duration)
+
+      return () => clearTimeout(timer)
+    }
+  }, [notification])
+
+  const handleDismiss = () => {
+    setIsVisible(false)
+    // Wait for animation to complete before calling onDismiss
+    setTimeout(() => {
+      if (notification.id) {
+        onDismiss(notification.id)
+      }
+    }, 300)
+  }
+
+  return (
+    <div
+      className={`
+        ${getStyles(notification.type)}
+        ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}
+        transform transition-all duration-300 ease-in-out
+        border rounded-lg shadow-lg p-4 flex items-start gap-3
+        backdrop-blur-sm
+      `}
+    >
+      {getIcon(notification.type)}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium leading-5">
+          {notification.message}
+        </p>
+      </div>
+      <button
+        onClick={handleDismiss}
+        className="flex-shrink-0 p-1 rounded-full hover:bg-black/10 transition-colors"
+        aria-label="Dismiss notification"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  )
 }
 
-export const showInfo = (title: string, message: string, duration?: number) => {
-  notificationManager.show({ type: 'info', title, message, duration })
-}
+// Hook for managing notifications
+export function useNotifications() {
+  const [notifications, setNotifications] = useState<NotificationConfig[]>([])
 
-export const showWarning = (title: string, message: string, duration?: number) => {
-  notificationManager.show({ type: 'warning', title, message, duration })
+  const addNotification = (config: Omit<NotificationConfig, 'id'>) => {
+    const id = Date.now().toString() + Math.random().toString(36).substr(2, 9)
+    const notification: NotificationConfig = {
+      ...config,
+      id,
+    }
+    setNotifications(prev => [...prev, notification])
+    return id
+  }
+
+  const removeNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id))
+  }
+
+  const clearAll = () => {
+    setNotifications([])
+  }
+
+  // Convenience methods
+  const showSuccess = (message: string, duration?: number) => 
+    addNotification({ message, type: 'success', duration })
+
+  const showError = (message: string, persistent?: boolean) => 
+    addNotification({ message, type: 'error', persistent })
+
+  const showInfo = (message: string, duration?: number) => 
+    addNotification({ message, type: 'info', duration })
+
+  const showWarning = (message: string, duration?: number) => 
+    addNotification({ message, type: 'warning', duration })
+
+  return {
+    notifications,
+    addNotification,
+    removeNotification,
+    clearAll,
+    showSuccess,
+    showError,
+    showInfo,
+    showWarning,
+  }
 }

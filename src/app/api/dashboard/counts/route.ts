@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,13 +17,21 @@ export async function GET(request: NextRequest) {
 
     const userId = payload.userId
 
-    // Get counts for all content types
+    const count = async (table: string) => {
+      const { count, error } = await supabaseAdmin
+        .from(table)
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+      if (error) throw error
+      return count ?? 0
+    }
+
     const [characters, npcs, worlds, quests, campaigns] = await Promise.all([
-      prisma.character.count({ where: { userId } }),
-      prisma.nPC.count({ where: { userId } }),
-      prisma.world.count({ where: { userId } }),
-      prisma.quest.count({ where: { userId } }),
-      prisma.campaign.count({ where: { userId } })
+      count('characters'),
+      count('npcs'),
+      count('worlds'),
+      count('quests'),
+      count('campaigns'),
     ])
 
     return NextResponse.json({

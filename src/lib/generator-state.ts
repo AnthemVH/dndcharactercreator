@@ -45,10 +45,53 @@ class GeneratorStateManager {
     }
   }
 
-  // Save state to localStorage with debouncing
+  // Save state to localStorage
   private saveState(generatorType?: string): void {
     try {
-      localStorage.setItem('generatorStates', JSON.stringify(this.state))
+      const existingRaw = localStorage.getItem('generatorStates')
+      let existing: GeneratorState = {}
+      try {
+        if (existingRaw) existing = JSON.parse(existingRaw)
+      } catch {
+        existing = {}
+      }
+
+      let snapshot: GeneratorState
+      if (generatorType) {
+        // Only update/delete the specific generator key and preserve others
+        const next: GeneratorState = { ...existing }
+        if (this.state[generatorType]) {
+          next[generatorType] = this.state[generatorType]
+        } else {
+          // Respect deletions from in-memory state
+          delete next[generatorType]
+        }
+        snapshot = next
+      } else {
+        // No specific type provided: write authoritative in-memory state
+        snapshot = { ...this.state }
+      }
+
+      localStorage.setItem('generatorStates', JSON.stringify(snapshot))
+      // Align in-memory state if we only updated one key
+      if (generatorType) {
+        // Merge other existing keys back into memory without overwriting our updated key
+        const mergedMemory: GeneratorState = { ...this.state }
+        Object.keys(existing).forEach((key) => {
+          if (key !== generatorType && !(key in mergedMemory)) {
+            mergedMemory[key] = existing[key]
+          }
+        })
+        // Also ensure deletions are reflected
+        Object.keys(mergedMemory).forEach((key) => {
+          if (!(key in snapshot)) {
+            delete mergedMemory[key]
+          }
+        })
+        this.state = mergedMemory
+      } else {
+        this.state = snapshot
+      }
     } catch (error) {
       console.error('Error saving generator states:', error)
     }
@@ -63,7 +106,7 @@ class GeneratorStateManager {
 
     // Set new timeout
     const timeout = setTimeout(() => {
-      this.saveState()
+      this.saveState(generatorType)
       this.saveTimeout.delete(generatorType)
     }, 500) // 500ms debounce
 
@@ -108,7 +151,7 @@ class GeneratorStateManager {
       if (debounce) {
         this.debouncedSave(generatorType)
       } else {
-        this.saveState()
+        this.saveState(generatorType)
       }
 
       // Notify listeners
@@ -150,7 +193,7 @@ class GeneratorStateManager {
   clearState(generatorType: string) {
     this.loadState()
     delete this.state[generatorType]
-    this.saveState()
+    this.saveState(generatorType)
     this.notifyListeners(generatorType)
   }
 

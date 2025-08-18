@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { openRouterQueue } from '@/lib/queue'
 import { deductTokens, hasEnoughTokens } from '@/lib/tokens'
-import { autoSaveContent } from '@/lib/auto-save'
+import { saveContentSingleInstance } from '@/lib/content-manager'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 
@@ -30,7 +30,8 @@ export async function POST(request: NextRequest) {
       customPrompt,
       characterSlots,
       campaignContext,
-      generateTypes
+      generateTypes,
+      skipPortrait // New parameter
     } = body
 
     if (!OPENROUTER_API_KEY) {
@@ -297,10 +298,10 @@ Generate a campaign with this EXACT structure (keep descriptions concise to avoi
 Keep all descriptions concise to avoid response truncation.`
     }
 
-    // Use the queue system for OpenRouter API calls
+    // Use the queue system for OpenRouter API calls with higher priority for campaigns
     const response = await openRouterQueue.add(async () => {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 60000) // Reduced to 1 minute timeout for campaign generation
+      const timeoutId = setTimeout(() => controller.abort(), 90000) // Increased to 90 seconds for campaign generation
       
       const apiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -347,7 +348,7 @@ Keep all descriptions concise to avoid response truncation.`
 
       clearTimeout(timeoutId)
       return apiResponse
-    }, payload.userId)
+    }, payload.userId, 1) // Higher priority for campaigns
 
     const data = await response.json()
     console.log('OpenRouter response:', JSON.stringify(data, null, 2))
@@ -493,7 +494,7 @@ Keep all descriptions concise to avoid response truncation.`
     // Handle integrated generation vs full campaign generation
     if (generateTypes && Array.isArray(generateTypes)) {
       // For integrated generation, return only the requested content types
-      const integratedContent = {}
+      const integratedContent: Record<string, any> = {}
       
       generateTypes.forEach(type => {
         if (campaign[type] !== undefined) {
@@ -541,21 +542,34 @@ Keep all descriptions concise to avoid response truncation.`
         )
       }
 
-      // Auto-save the generated campaign
+      // Auto-save the generated campaign using single-instance manager
+      const campaignData = {
+        ...enhancedCampaign,
+        portrait: null // Will be updated later if portrait generation succeeds
+      }
+      
       try {
-        await autoSaveContent({
+        const saveResult = await saveContentSingleInstance({
           type: 'campaign',
-          data: enhancedCampaign,
+          data: campaignData,
           userId: payload.userId
         })
-        console.log('Campaign auto-saved successfully')
+        console.log('Campaign auto-saved successfully:', saveResult)
+        
+        // Add the saved ID to the campaign data for frontend tracking
+        campaignData.id = saveResult.id
       } catch (autoSaveError) {
         console.error('Auto-save error:', autoSaveError)
         // Don't fail the generation if auto-save fails
       }
 
-      console.log('Campaign generated successfully using OpenRouter queue')
-      return NextResponse.json({ campaign: enhancedCampaign })
+      // Return campaign data immediately with save info
+      console.log('Campaign generated successfully - returning data immediately')
+      return NextResponse.json({ 
+        campaign: campaignData,
+        portraitPending: !skipPortrait,
+        savedId: campaignData.id
+      })
     }
   } catch (error) {
     console.error('Campaign generation error:', error)

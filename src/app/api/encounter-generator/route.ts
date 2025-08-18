@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { openRouterQueue } from '@/lib/queue'
 import { deductTokens, hasEnoughTokens } from '@/lib/tokens'
-import { autoSaveContent } from '@/lib/auto-save'
+import { saveContentSingleInstance } from '@/lib/content-manager'
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
 
@@ -231,21 +231,34 @@ Please return ONLY a valid JSON object with this EXACT structure:
       )
     }
 
-    // Auto-save the generated encounter
+    // Auto-save the generated encounter using single-instance manager
+    const encounterData = {
+      ...enhancedEncounter,
+      portrait: null // Will be updated later if portrait generation succeeds
+    }
+    
     try {
-      await autoSaveContent({
+      const saveResult = await saveContentSingleInstance({
         type: 'encounter',
-        data: response,
+        data: encounterData,
         userId: payload.userId
       })
-      console.log('Encounter auto-saved successfully')
+      console.log('Encounter auto-saved successfully:', saveResult)
+      
+      // Add the saved ID to the encounter data for frontend tracking
+      encounterData.id = saveResult.id
     } catch (autoSaveError) {
       console.error('Auto-save error:', autoSaveError)
       // Don't fail the generation if auto-save fails
     }
 
-    console.log('Encounter generated successfully using OpenRouter queue')
-    return NextResponse.json({ encounter: response })
+    // Return encounter data immediately with save info
+    console.log('Encounter generated successfully - returning data immediately')
+    return NextResponse.json({ 
+      encounter: encounterData,
+      portraitPending: !skipPortrait,
+      savedId: encounterData.id
+    })
   } catch (error) {
     console.error('Encounter generation error:', error)
     

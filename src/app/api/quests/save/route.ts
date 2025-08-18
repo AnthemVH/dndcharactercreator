@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { autoSaveContent } from '@/lib/auto-save'
+import { saveContentSingleInstance } from '@/lib/content-manager'
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,31 +22,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No quest data provided' }, { status: 400 })
     }
 
-    // Save the quest to the database
+    // Use single-instance content manager
     try {
-      const savedQuest = await autoSaveContent({
+      console.log('Saving quest with data:', {
+        name: quest.name,
+        type: quest.type,
+        difficulty: quest.difficulty
+      })
+      
+      const saveResult = await saveContentSingleInstance({
         type: 'quest',
         data: quest,
         userId: payload.userId
       })
       
-      console.log('Quest saved successfully')
-      return NextResponse.json({ 
-        success: true,
-        quest: savedQuest
+      console.log('Quest saved with result:', saveResult)
+      
+      return NextResponse.json({
+        id: saveResult.id,
+        isNew: saveResult.isNew,
+        autoSave: saveResult.autoSave,
+        message: saveResult.isNew ? 'Quest saved successfully' : 'Quest updated successfully'
       })
       
-    } catch (autoSaveError) {
-      console.error('Auto-save error:', autoSaveError)
-      return NextResponse.json(
-        { error: 'Failed to save quest. Please try again.' },
-        { status: 500 }
-      )
+    } catch (saveError) {
+      console.error('Quest save error:', saveError)
+      return NextResponse.json({ error: 'Failed to save quest' }, { status: 500 })
     }
+    
   } catch (error) {
-    console.error('Quest save error:', error)
+    console.error('Quest save route error:', error)
     return NextResponse.json(
-      { error: 'Failed to save quest. Please try again.' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

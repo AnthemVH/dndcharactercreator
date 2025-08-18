@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
-import { autoSaveContent } from '@/lib/auto-save'
+import { saveContentSingleInstance } from '@/lib/content-manager'
 import { saveImageToDatabase } from '@/lib/image-storage'
-import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,56 +23,56 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No NPC data provided' }, { status: 400 })
     }
 
-    // Save the NPC to the database
+    // Use single-instance content manager
     try {
-      const savedNPC = await autoSaveContent({
+      console.log('Saving NPC with data:', {
+        name: npc.name,
+        hasPortrait: !!npc.portrait,
+        hasPortraitUrl: !!npc.portraitUrl,
+        portrait: npc.portrait,
+        portraitUrl: npc.portraitUrl
+      })
+      
+      const saveResult = await saveContentSingleInstance({
         type: 'npc',
         data: npc,
         userId: payload.userId
       })
       
-      // Update with portrait URL if it exists
-      if (npc.portraitUrl && savedNPC) {
-        await prisma.nPC.update({
-          where: { id: savedNPC.id },
-          data: { portraitUrl: npc.portraitUrl }
-        })
-      }
+      console.log('NPC saved with result:', saveResult)
       
       // Save the image to the database if it exists
-      if (npc.portrait && savedNPC) {
+      if (npc.portrait && saveResult.id) {
         try {
           await saveImageToDatabase(
             npc.portrait,
+            saveResult.id,
             'npc',
-            savedNPC.id,
-            payload.userId,
-            false // not auto-save
+            payload.userId
           )
-          console.log('NPC image saved to database')
-        } catch (imageSaveError) {
-          console.error('Image save error:', imageSaveError)
-          // Don't fail the save if image save fails
+          console.log('NPC portrait saved to database')
+        } catch (imageError) {
+          console.error('Failed to save NPC portrait:', imageError)
+          // Don't fail the save if image saving fails
         }
       }
       
-      console.log('NPC saved successfully')
-      return NextResponse.json({ 
-        success: true,
-        npc: savedNPC
+      return NextResponse.json({
+        id: saveResult.id,
+        isNew: saveResult.isNew,
+        autoSave: saveResult.autoSave,
+        message: saveResult.isNew ? 'NPC saved successfully' : 'NPC updated successfully'
       })
       
-    } catch (autoSaveError) {
-      console.error('Auto-save error:', autoSaveError)
-      return NextResponse.json(
-        { error: 'Failed to save NPC. Please try again.' },
-        { status: 500 }
-      )
+    } catch (saveError) {
+      console.error('NPC save error:', saveError)
+      return NextResponse.json({ error: 'Failed to save NPC' }, { status: 500 })
     }
+    
   } catch (error) {
-    console.error('NPC save error:', error)
+    console.error('NPC save route error:', error)
     return NextResponse.json(
-      { error: 'Failed to save NPC. Please try again.' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

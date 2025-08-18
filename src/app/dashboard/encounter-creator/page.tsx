@@ -8,7 +8,8 @@ import { clearLocalStorageState, saveToLocalStorage, loadFromLocalStorage } from
 import { generatorStateManager } from '@/lib/generator-state'
 import FantasyToggle from '@/components/FantasyToggle'
 import GenerationStatusPanel from '@/components/GenerationStatusPanel'
-import { showSuccess, showError } from '@/components/FantasyNotification'
+import FantasyNotification, { useNotifications } from '@/components/FantasyNotification'
+import { formatArrayField, formatTextField, getListClasses, getSectionTitle } from '@/lib/content-formatter'
 
 interface EncounterForm {
   name?: string
@@ -18,6 +19,7 @@ interface EncounterForm {
 }
 
 interface GeneratedEncounter {
+  id?: string
   name: string
   type: string
   difficulty: string
@@ -80,6 +82,9 @@ export default function EncounterCreator() {
   })
   const [isUpdatingFromState, setIsUpdatingFromState] = useState(false)
   const [isPortraitLoading, setIsPortraitLoading] = useState(false)
+  
+  // Notification system
+  const { notifications, removeNotification, showSuccess, showError } = useNotifications()
 
   // Load state from global state manager on component mount
   useEffect(() => {
@@ -414,6 +419,7 @@ export default function EncounterCreator() {
       
       // Normalize the encounter data to ensure all fields are in the expected format
       const normalizedEncounter: GeneratedEncounter = {
+        id: data.savedId, // Add the saved ID from the API
         ...data.encounter,
         enemies: splitToArray(data.encounter.enemies),
         allies: splitToArray(data.encounter.allies),
@@ -436,6 +442,10 @@ export default function EncounterCreator() {
       };
       
       setEncounter(normalizedEncounter)
+      
+      // Show autosave notification
+      showSuccess('Encounter generated and autosaved!')
+      
       generatorStateManager.updateState(GENERATOR_TYPE, {
         result: normalizedEncounter,
         isGenerating: false,
@@ -669,17 +679,30 @@ export default function EncounterCreator() {
       }
 
       const result = await response.json()
-      showSuccess('Encounter Saved!', 'Your encounter has been saved successfully.')
+      
+      // Update the encounter with the returned ID if it's a new save
+      if (result.id && !encounter.id) {
+        setEncounter(prev => prev ? { ...prev, id: result.id } : null)
+      }
+      
+      // Show success notification based on whether it was updated or newly saved
+      if (result.isNew) {
+        showSuccess('Encounter saved successfully!')
+      } else {
+        showSuccess('Encounter updated successfully!')
+      }
+      
     } catch (error) {
       console.error('Encounter saving error:', error)
       const errorMessage = error instanceof Error ? error.message : 'Failed to save encounter. Please try again.'
       setError(errorMessage)
-      showError('Save Failed', errorMessage)
+      showError(errorMessage)
     }
   }
 
   return (
     <div className="min-h-screen fantasy-main">
+      <FantasyNotification notifications={notifications} onDismiss={removeNotification} />
       <GenerationStatusPanel />
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
